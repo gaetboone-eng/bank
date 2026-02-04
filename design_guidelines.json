@@ -1,0 +1,153 @@
+{
+  "identity": {
+    "persona": "E1",
+    "principles": [
+      "Fusion over Imitation: Mix Swiss Design with Organic Real Estate aesthetics.",
+      "Emotion First: Trust, Clarity, and Efficiency.",
+      "Content is King: Data density with breathing room.",
+      "Zoom In: Focus on key metrics (Rent Collected, Unpaid).",
+      "Negative Space: Use white space to separate bank accounts and tenant lists.",
+      "Contrast: High contrast for readability (Black text on White, Bold Emerald for success)."
+    ],
+    "anti_patterns": [
+      "No generic 'SaaS Blue' or 'Teal' for CTAs.",
+      "No 'Inter' for headings.",
+      "No centered layouts for data tables.",
+      "No gradients on backgrounds (flat, clean surfaces)."
+    ]
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["600", "700", "800"],
+      "usage": "Use for all page titles, card headers, and major metrics.",
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "font_family": "Plus Jakarta Sans, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Use for all standard text, table data, and labels.",
+      "letter_spacing": "tracking-normal"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace",
+      "usage": "Use for transaction IDs, IBANs, and raw numerical data."
+    }
+  },
+  "colors": {
+    "theme": "light",
+    "palette": {
+      "primary": {
+        "name": "Deep Emerald",
+        "hex": "#064E3B",
+        "tailwind": "bg-emerald-900 text-white",
+        "usage": "Primary buttons, active states, 'Paid' status indicators."
+      },
+      "secondary": {
+        "name": "Alert Orange",
+        "hex": "#F97316",
+        "tailwind": "bg-orange-500 text-white",
+        "usage": "Notifications, 'Unpaid' status, urgent actions."
+      },
+      "background": {
+        "name": "Swiss White",
+        "hex": "#FFFFFF",
+        "tailwind": "bg-white",
+        "usage": "Main card backgrounds."
+      },
+      "surface": {
+        "name": "Off-White Slate",
+        "hex": "#F8FAFC",
+        "tailwind": "bg-slate-50",
+        "usage": "App background, sidebar background."
+      },
+      "text": {
+        "primary": "#0F172A",
+        "secondary": "#64748B",
+        "tailwind_primary": "text-slate-900",
+        "tailwind_secondary": "text-slate-500"
+      }
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid Mode B (High Density)",
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "item_gap": "gap-4 md:gap-6",
+      "internal_padding": "p-6"
+    },
+    "border_radius": {
+      "default": "rounded-md",
+      "buttons": "rounded-full",
+      "cards": "rounded-lg"
+    },
+    "alignment": "Left-aligned text for all data. Right-aligned for currency.",
+    "cards": "Flat style, 1px border (border-slate-200), no shadow or very subtle shadow-sm."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-emerald-900 hover:bg-emerald-800 text-white rounded-full px-6 py-2 font-medium transition-all",
+      "secondary": "bg-white border border-slate-200 hover:bg-slate-50 text-slate-900 rounded-full px-6 py-2 font-medium transition-all",
+      "destructive": "bg-red-600 hover:bg-red-700 text-white rounded-full px-6 py-2"
+    },
+    "cards": {
+      "style": "bg-white border border-slate-200 rounded-lg p-6 flex flex-col gap-4"
+    },
+    "inputs": {
+      "style": "bg-white border border-slate-200 rounded-md px-4 py-2 focus:ring-2 focus:ring-emerald-900/20 focus:border-emerald-900 transition-all"
+    },
+    "status_badges": {
+      "paid": "bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider",
+      "unpaid": "bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider",
+      "pending": "bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+    }
+  },
+  "visual_enhancers": {
+    "textures": "Use subtle noise texture on the sidebar background if possible.",
+    "icons": "Phosphor Icons (Regular weight) or Lucide React.",
+    "motion": "Micro-interactions on hover. Smooth transitions for page loads. No 'springy' bounces, keep it professional."
+  },
+  "image_urls": {
+    "tenants": [
+      {
+        "url": "https://images.unsplash.com/photo-1595436222774-4b1cd819aada?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwyfHxwb3J0cmFpdCUyMHByb2Zlc3Npb25hbCUyMHBlcnNvbnxlbnwwfHx8fDE3NzAxOTc0NDd8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Professional woman tenant",
+        "category": "avatar"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1678542230173-8e2c3eb87c85?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHw0fHxwb3J0cmFpdCUyMHByb2Zlc3Npb25hbCUyMHBlcnNvbnxlbnwwfHx8fDE3NzAxOTc0NDd8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Professional man tenant",
+        "category": "avatar"
+      }
+    ],
+    "properties": [
+      {
+        "url": "https://images.unsplash.com/photo-1662454419716-c4c504728811?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBhcGFydG1lbnQlMjBpbnRlcmlvcnxlbnwwfHx8fDE3NzAxOTc0NTJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern Bedroom",
+        "category": "property_thumbnail"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1666282167632-c613fbeb163c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBhcGFydG1lbnQlMjBpbnRlcmlvcnxlbnwwfHx8fDE3NzAxOTc0NTJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern Living Room",
+        "category": "property_thumbnail"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. INSTALL FONTS: Add '@fontsource/manrope' and '@fontsource/plus-jakarta-sans' to package.json and import them in index.js.",
+    "2. TAILWIND CONFIG: Update tailwind.config.js to include the new font families and the Emerald/Orange color palette.",
+    "3. SHADCN OVERRIDES: When using Shadcn components, override the default 'radius' to be smaller (0.3rem) for a sharper, more professional look.",
+    "4. LAYOUT: Use the 'Bento Grid' strategy for the Dashboard. Do not just stack cards vertically.",
+    "5. NOTIFICATIONS: Use 'Sonner' for toast notifications. Style them to match the Emerald/Orange theme.",
+    "6. CHARTS: Use Recharts for the 'Cash Flow' and 'Occupancy' charts. Style them with the theme colors.",
+    "7. DATA-TESTID: Ensure every interactive element (buttons, inputs, links) has a 'data-testid' attribute."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI Slop' - no generic centered layouts.",
+    "Use 2-3x more spacing than typical.",
+    "Dark colors look good independently, avoid dark gradients.",
+    "No 'transition: all'.",
+    "No AI emojis.",
+    "Use 'sonner' for toasts."
+  ]
+}
