@@ -892,6 +892,174 @@ async def delete_matching_rule(rule_id: str, current_user: dict = Depends(get_cu
         raise HTTPException(status_code=404, detail="Rule not found")
     return {"message": "Rule deleted"}
 
+# ==================== MONTHLY PAYMENT STATUS ====================
+
+@api_router.get("/payments/monthly-status")
+async def get_monthly_payment_status(
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2020, le=2100),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get payment status for all tenants for a specific month.
+    Considers payments made from the 28th of the previous month.
+    """
+    from calendar import monthrange
+    
+    # Calculate date range: 28th of previous month to 28th of current month
+    if month == 1:
+        prev_month = 12
+        prev_year = year - 1
+    else:
+        prev_month = month - 1
+        prev_year = year
+    
+    # Start date: 28th of previous month
+    start_date = datetime(prev_year, prev_month, 28, 0, 0, 0, tzinfo=timezone.utc)
+    
+    # End date: 28th of current month (or last day if month has less than 28 days)
+    last_day = min(28, monthrange(year, month)[1])
+    end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    
+    # Get all tenants
+    tenants = await db.tenants.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Get all payments in the date range
+    payments = await db.payments.find({
+        "user_id": current_user["id"],
+        "payment_date": {
+            "$gte": start_date.isoformat(),
+            "$lte": end_date.isoformat()
+        }
+    }, {"_id": 0}).to_list(10000)
+    
+    # Also check transactions directly (for payments not yet in payments collection)
+    transactions = await db.transactions.find({
+        "user_id": current_user["id"],
+        "amount": {"$gt": 0},
+        "matched_tenant_id": {"$ne": None},
+        "transaction_date": {
+            "$gte": start_date.isoformat(),
+            "$lte": end_date.isoformat()
+        }
+    }, {"_id": 0}).to_list(10000)
+    
+    # Build set of tenants who paid
+    paid_tenant_ids = set()
+    payment_details = {}
+    
+    for p in payments:
+        tenant_id = p.get("tenant_id")
+        if tenant_id:
+            paid_tenant_ids.add(tenant_id)
+            payment_details[tenant_id] = {
+                "amount": p.get("amount"),
+                "date": p.get("payment_date"),
+                "source": "payment"
+            }
+    
+    for tx in transactions:
+        tenant_id = tx.get("matched_tenant_id")
+        if tenant_id and tenant_id not in paid_tenant_ids:
+            paid_tenant_ids.add(tenant_id)
+            payment_details[tenant_id] = {
+                "amount": tx.get("amount"),
+                "date": tx.get("transaction_date"),
+                "source": "transaction"
+            }
+    
+    # Build response
+    month_names = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+    
+    paid_tenants = []
+    unpaid_tenants = []
+    
+    for tenant in tenants:
+        tenant_info = {
+            "id": tenant["id"],
+            "name": tenant["name"],
+            "rent_amount": tenant.get("rent_amount", 0),
+            "property_address": tenant.get("property_address", ""),
+            "phone": tenant.get("phone", ""),
+            "email": tenant.get("email", "")
+        }
+        
+        if tenant["id"] in paid_tenant_ids:
+            tenant_info["payment"] = payment_details.get(tenant["id"])
+            paid_tenants.append(tenant_info)
+        else:
+            unpaid_tenants.append(tenant_info)
+    
+    # Sort by name
+    paid_tenants.sort(key=lambda x: x["name"])
+    unpaid_tenants.sort(key=lambda x: x["name"])
+    
+    total_expected = sum(t.get("rent_amount", 0) for t in tenants if t.get("rent_amount", 0) > 0)
+    total_paid = sum(t.get("rent_amount", 0) for t in paid_tenants)
+    
+    return {
+        "month": month,
+        "month_name": month_names[month],
+        "year": year,
+        "date_range": {
+            "start": start_date.isoformat(),
+            "end": end_date.isoformat()
+        },
+        "summary": {
+            "total_tenants": len(tenants),
+            "paid_count": len(paid_tenants),
+            "unpaid_count": len(unpaid_tenants),
+            "total_expected": total_expected,
+            "total_paid": total_paid,
+            "remaining": total_expected - total_paid
+        },
+        "paid_tenants": paid_tenants,
+        "unpaid_tenants": unpaid_tenants
+    }
+
+@api_router.get("/payments/available-months")
+async def get_available_months(current_user: dict = Depends(get_current_user)):
+    """Get list of months with payment data"""
+    # Get earliest and latest payment dates
+    earliest = await db.payments.find_one(
+        {"user_id": current_user["id"]},
+        sort=[("payment_date", 1)]
+    )
+    latest = await db.payments.find_one(
+        {"user_id": current_user["id"]},
+        sort=[("payment_date", -1)]
+    )
+    
+    if not earliest or not latest:
+        # Return current month if no data
+        now = datetime.now(timezone.utc)
+        return {"months": [{"month": now.month, "year": now.year}]}
+    
+    # Generate list of months between earliest and latest
+    from dateutil.relativedelta import relativedelta
+    
+    start_date = datetime.fromisoformat(earliest["payment_date"].replace("Z", "+00:00"))
+    end_date = datetime.fromisoformat(latest["payment_date"].replace("Z", "+00:00"))
+    
+    months = []
+    current = datetime(start_date.year, start_date.month, 1)
+    end = datetime(end_date.year, end_date.month, 1)
+    
+    while current <= end:
+        months.append({"month": current.month, "year": current.year})
+        current += relativedelta(months=1)
+    
+    # Add current month if not in list
+    now = datetime.now(timezone.utc)
+    if {"month": now.month, "year": now.year} not in months:
+        months.append({"month": now.month, "year": now.year})
+    
+    return {"months": sorted(months, key=lambda x: (x["year"], x["month"]), reverse=True)}
+
 # ==================== PAYMENTS ROUTES ====================
 
 @api_router.post("/payments", response_model=PaymentResponse)
