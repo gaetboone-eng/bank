@@ -74,6 +74,7 @@ function App() {
             <Route path="tenants/:id" element={<TenantDetail />} />
             <Route path="banks" element={<Banks />} />
             <Route path="transactions" element={<Transactions />} />
+            <Route path="monthly-report" element={<MonthlyReport />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
