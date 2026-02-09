@@ -230,17 +230,78 @@ export default function Banks() {
             Gérez vos comptes bancaires
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              className="bg-emerald-900 hover:bg-emerald-800" 
-              onClick={openCreateDialog}
-              data-testid="add-bank-btn"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Ajouter une banque
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-3">
+          {/* Connect Bank Dialog */}
+          <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="connect-bank-btn">
+                <LinkIcon className="w-4 h-4 mr-2" />
+                Connecter une banque
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle style={{ fontFamily: "Manrope" }}>
+                  Connecter votre banque
+                </DialogTitle>
+                <DialogDescription>
+                  Connectez votre compte bancaire pour importer automatiquement vos transactions
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Sélectionnez votre banque</Label>
+                  <Select value={selectedAspsp} onValueChange={setSelectedAspsp}>
+                    <SelectTrigger data-testid="select-aspsp">
+                      <SelectValue placeholder="Choisir une banque..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableAspsps.map((aspsp) => (
+                        <SelectItem key={aspsp.name} value={aspsp.name}>
+                          {aspsp.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {availableAspsps.length === 0 && (
+                    <p className="text-sm text-slate-500">Chargement des banques...</p>
+                  )}
+                  {availableAspsps.length > 0 && availableAspsps.length < 5 && (
+                    <p className="text-xs text-orange-600">
+                      Mode Sandbox : banques de test uniquement. Passez en Production pour toutes les banques.
+                    </p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button variant="outline" onClick={() => setConnectDialogOpen(false)}>
+                    Annuler
+                  </Button>
+                  <Button 
+                    className="bg-emerald-900 hover:bg-emerald-800"
+                    onClick={handleConnectBank}
+                    disabled={!selectedAspsp || connectLoading}
+                    data-testid="confirm-connect-btn"
+                  >
+                    {connectLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Connecter
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Manual Bank Dialog */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                className="bg-emerald-900 hover:bg-emerald-800" 
+                onClick={openCreateDialog}
+                data-testid="add-bank-btn"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter manuellement
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle style={{ fontFamily: "Manrope" }}>
