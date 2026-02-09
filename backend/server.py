@@ -239,26 +239,33 @@ def create_enable_banking_jwt():
         "exp": iat + 3600,
     }
     
-    # Handle private key - could be file path or raw key
-    private_key = ENABLE_BANKING_PRIVATE_KEY
-    if private_key.startswith("-----"):
-        # It's the raw key
-        pass
-    else:
-        # It's a file path - read it
-        try:
-            with open(private_key, 'r') as f:
-                private_key = f.read()
-        except:
-            pass
+    # Load private key using cryptography
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.backends import default_backend
     
-    token = pyjwt.encode(
-        jwt_body,
-        private_key,
-        algorithm="RS256",
-        headers={"kid": ENABLE_BANKING_APP_ID}
-    )
-    return token
+    try:
+        # Check if it's a file path
+        if ENABLE_BANKING_PRIVATE_KEY.startswith("/") or ENABLE_BANKING_PRIVATE_KEY.endswith(".pem"):
+            with open(ENABLE_BANKING_PRIVATE_KEY, 'rb') as f:
+                key_data = f.read()
+        else:
+            key_data = ENABLE_BANKING_PRIVATE_KEY.encode('utf-8')
+        
+        private_key = serialization.load_pem_private_key(
+            key_data,
+            password=None,
+            backend=default_backend()
+        )
+        
+        token = pyjwt.encode(
+            jwt_body,
+            private_key,
+            algorithm="RS256",
+            headers={"kid": ENABLE_BANKING_APP_ID}
+        )
+        return token
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating JWT: {str(e)}")
 
 # ==================== AUTH ROUTES ====================
 
