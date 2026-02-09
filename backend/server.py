@@ -34,6 +34,9 @@ TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM', '')
 
 # Notion Config
 NOTION_API_KEY = os.environ.get('NOTION_API_KEY', '')
+"
+
+"
 NOTION_DATABASE_ID = os.environ.get('NOTION_DATABASE_ID', '')
 
 # Create the main app
