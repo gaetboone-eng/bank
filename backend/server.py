@@ -724,12 +724,51 @@ def calculate_match_score(tenant_name, transaction_desc):
                             break
     return score
 
+async def match_using_learned_rules(user_id: str, transaction_desc: str, amount: float):
+    """Try to match transaction using previously learned rules"""
+    desc_normalized = normalize_text(transaction_desc)
+    desc_keywords = extract_name_words(transaction_desc)
+    desc_pattern = " ".join(desc_keywords[:5])
+    
+    # Get all matching rules for this user
+    rules = await db.matching_rules.find({"user_id": user_id}).to_list(1000)
+    
+    best_rule = None
+    best_score = 0
+    
+    for rule in rules:
+        rule_pattern = rule.get("pattern", "")
+        rule_words = rule_pattern.split()
+        
+        # Calculate similarity score
+        score = 0
+        for word in rule_words:
+            if word in desc_pattern:
+                score += 10
+            elif any(word[:4] in dw or dw[:4] in word for dw in desc_keywords if len(dw) > 3 and len(word) > 3):
+                score += 5
+        
+        # Bonus for amount match
+        rule_amount = rule.get("amount", 0)
+        if rule_amount > 0:
+            amount_diff = abs(amount - rule_amount) / rule_amount
+            if amount_diff < 0.05:  # 5% tolerance for learned rules
+                score += 15
+        
+        # Higher score = better match, minimum 15 for rule-based matching
+        if score > best_score and score >= 15:
+            best_score = score
+            best_rule = rule
+    
+    return best_rule, best_score
+
 @api_router.post("/transactions/auto-match")
 async def auto_match_transactions(current_user: dict = Depends(get_current_user)):
-    """Automatically match unmatched transactions with tenants based on name and amount"""
+    """Automatically match unmatched transactions with tenants based on learned rules, name and amount"""
     
     # Get all tenants
     tenants = await db.tenants.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+    tenants_dict = {t["id"]: t for t in tenants}
     
     # Get unmatched positive transactions (incoming payments)
     transactions = await db.transactions.find({
@@ -748,21 +787,33 @@ async def auto_match_transactions(current_user: dict = Depends(get_current_user)
         
         best_match = None
         best_score = 0
+        match_source = "name"
         
-        for tenant in tenants:
-            rent = tenant.get('rent_amount', 0)
-            if rent > 0:
-                # Check amount tolerance (15%)
-                amount_diff = abs(amount - rent) / rent
-                if amount_diff < 0.15:
-                    score = calculate_match_score(tenant['name'], desc)
-                    # Bonus for exact amount match
-                    if amount_diff < 0.01:
-                        score += 5
-                    
-                    if score > best_score and score >= 10:
-                        best_score = score
-                        best_match = tenant
+        # FIRST: Try to match using learned rules (from previous manual associations)
+        learned_rule, rule_score = await match_using_learned_rules(current_user["id"], desc, amount)
+        if learned_rule and learned_rule["tenant_id"] in tenants_dict:
+            best_match = tenants_dict[learned_rule["tenant_id"]]
+            best_score = rule_score
+            match_source = "learned_rule"
+            logger.info(f"🎯 Rule-based match: {desc[:40]} → {best_match['name']} (score: {rule_score})")
+        
+        # SECOND: If no rule match, try name-based matching
+        if not best_match:
+            for tenant in tenants:
+                rent = tenant.get('rent_amount', 0)
+                if rent > 0:
+                    # Check amount tolerance (15%)
+                    amount_diff = abs(amount - rent) / rent
+                    if amount_diff < 0.15:
+                        score = calculate_match_score(tenant['name'], desc)
+                        # Bonus for exact amount match
+                        if amount_diff < 0.01:
+                            score += 5
+                        
+                        if score > best_score and score >= 10:
+                            best_score = score
+                            best_match = tenant
+                            match_source = "name"
         
         if best_match:
             # Update transaction
