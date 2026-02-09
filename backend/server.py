@@ -642,6 +642,143 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
     
     return {"message": "Transaction matched to tenant", "payment_id": payment_id}
 
+# ==================== AUTO-MATCHING ====================
+
+def normalize_text(text):
+    """Normalize text for comparison"""
+    if not text:
+        return ""
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    return text
+
+def extract_name_words(text):
+    """Extract potential names from transaction description"""
+    text = normalize_text(text)
+    stopwords = ['virement', 'sepa', 'recu', 'vir', 'inst', 'loyer', 'prlv', 'carte', 'cb', 
+                 'mme', 'mlle', 'monsieur', 'madame', 'mr', 'dr', 'ei', 'sci', 'scr', 
+                 'instantane', 'permanent', 'credit', 'debit', 'prelvt', 'bureau', 'msp',
+                 'cab', 'cabinet', 'fevrier', 'janvier', 'mars', 'avril', 'mai', 'juin',
+                 '2026', '2025', '202602', '202601', 'ics', 'fr', 'sca', 'ipr', 'loy',
+                 'med', 'maison', 'centre', 'mmc', 'seclin', 'docteur', 'juillet', 'aout',
+                 'septembre', 'octobre', 'novembre', 'decembre']
+    words = text.split()
+    return [w for w in words if len(w) > 2 and w not in stopwords]
+
+def calculate_match_score(tenant_name, transaction_desc):
+    """Calculate match score between tenant name and transaction description"""
+    tenant_normalized = normalize_text(tenant_name)
+    tenant_parts = tenant_normalized.split()
+    desc_words = extract_name_words(transaction_desc)
+    desc_text = ' '.join(desc_words)
+    
+    score = 0
+    for part in tenant_parts:
+        if len(part) > 2:
+            if part in desc_text:
+                score += 10
+            else:
+                for word in desc_words:
+                    if len(word) > 3 and len(part) > 3:
+                        if word.startswith(part[:4]) or part.startswith(word[:4]):
+                            score += 5
+                            break
+    return score
+
+@api_router.post("/transactions/auto-match")
+async def auto_match_transactions(current_user: dict = Depends(get_current_user)):
+    """Automatically match unmatched transactions with tenants based on name and amount"""
+    
+    # Get all tenants
+    tenants = await db.tenants.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+    
+    # Get unmatched positive transactions (incoming payments)
+    transactions = await db.transactions.find({
+        "user_id": current_user["id"],
+        "amount": {"$gt": 0},
+        "matched_tenant_id": None
+    }, {"_id": 0}).to_list(1000)
+    
+    matches = []
+    current_month = datetime.now(timezone.utc).strftime("%B")
+    current_year = datetime.now(timezone.utc).year
+    
+    for tx in transactions:
+        desc = tx.get('description', '')
+        amount = tx['amount']
+        
+        best_match = None
+        best_score = 0
+        
+        for tenant in tenants:
+            rent = tenant.get('rent_amount', 0)
+            if rent > 0:
+                # Check amount tolerance (15%)
+                amount_diff = abs(amount - rent) / rent
+                if amount_diff < 0.15:
+                    score = calculate_match_score(tenant['name'], desc)
+                    # Bonus for exact amount match
+                    if amount_diff < 0.01:
+                        score += 5
+                    
+                    if score > best_score and score >= 10:
+                        best_score = score
+                        best_match = tenant
+        
+        if best_match:
+            # Update transaction
+            await db.transactions.update_one(
+                {"id": tx['id']},
+                {"$set": {"matched_tenant_id": best_match['id']}}
+            )
+            
+            # Check if payment exists for this month
+            existing = await db.payments.find_one({
+                "tenant_id": best_match['id'],
+                "month": current_month,
+                "year": current_year
+            })
+            
+            if not existing:
+                # Create payment
+                payment_id = str(uuid.uuid4())
+                tx_date = tx.get('transaction_date', datetime.now(timezone.utc).isoformat())
+                
+                await db.payments.insert_one({
+                    "id": payment_id,
+                    "user_id": current_user["id"],
+                    "tenant_id": best_match['id'],
+                    "amount": amount,
+                    "payment_date": tx_date,
+                    "bank_id": tx['bank_id'],
+                    "transaction_id": tx['id'],
+                    "month": current_month,
+                    "year": current_year,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Update tenant status
+                await db.tenants.update_one(
+                    {"id": best_match['id']},
+                    {"$set": {
+                        "payment_status": "paid",
+                        "last_payment_date": tx_date
+                    }}
+                )
+                
+                matches.append({
+                    "transaction_amount": amount,
+                    "tenant_name": best_match['name'],
+                    "score": best_score
+                })
+    
+    return {
+        "message": f"Auto-matched {len(matches)} transactions",
+        "matches": matches
+    }
+
 # ==================== PAYMENTS ROUTES ====================
 
 @api_router.post("/payments", response_model=PaymentResponse)
