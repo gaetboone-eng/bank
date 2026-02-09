@@ -614,6 +614,43 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
     
     await db.transactions.update_one({"id": tx_id}, {"$set": {"matched_tenant_id": tenant_id}})
     
+    # ===== SAVE MATCHING RULE FOR FUTURE AUTO-MATCHING =====
+    # Extract key patterns from transaction for future matching
+    description = tx.get("description", "")
+    description_normalized = normalize_text(description)
+    
+    # Extract unique identifier words (potential payer name)
+    keywords = extract_name_words(description)
+    keyword_pattern = " ".join(keywords[:5])  # Keep first 5 significant words
+    
+    # Check if rule already exists
+    existing_rule = await db.matching_rules.find_one({
+        "user_id": current_user["id"],
+        "tenant_id": tenant_id,
+        "pattern": keyword_pattern
+    })
+    
+    if not existing_rule and keyword_pattern:
+        # Save new matching rule
+        await db.matching_rules.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "tenant_id": tenant_id,
+            "tenant_name": tenant["name"],
+            "pattern": keyword_pattern,
+            "original_description": description,
+            "amount": tx["amount"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "match_count": 1
+        })
+        logger.info(f"📝 New matching rule saved: '{keyword_pattern}' → {tenant['name']}")
+    elif existing_rule:
+        # Increment match count
+        await db.matching_rules.update_one(
+            {"id": existing_rule["id"]},
+            {"$inc": {"match_count": 1}}
+        )
+    
     # Create payment record
     tx_date = datetime.fromisoformat(tx["transaction_date"]) if isinstance(tx["transaction_date"], str) else tx["transaction_date"]
     payment_id = str(uuid.uuid4())
@@ -640,7 +677,7 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
         }}
     )
     
-    return {"message": "Transaction matched to tenant", "payment_id": payment_id}
+    return {"message": "Transaction matched to tenant", "payment_id": payment_id, "rule_saved": bool(keyword_pattern)}
 
 # ==================== AUTO-MATCHING ====================
 
@@ -657,7 +694,7 @@ def normalize_text(text):
 def extract_name_words(text):
     """Extract potential names from transaction description"""
     text = normalize_text(text)
-    stopwords = ['virement', 'sepa', 'recu', 'vir', 'inst', 'loyer', 'prlv', 'carte', 'cb', 
+    stopwords = ['virement', 'sepa', 'recu', 'vir', 'inst', 'loyer', 'prlv', 'carte', 'cb',
                  'mme', 'mlle', 'monsieur', 'madame', 'mr', 'dr', 'ei', 'sci', 'scr', 
                  'instantane', 'permanent', 'credit', 'debit', 'prelvt', 'bureau', 'msp',
                  'cab', 'cabinet', 'fevrier', 'janvier', 'mars', 'avril', 'mai', 'juin',
