@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,15 +12,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Plus, 
   Building2, 
   Pencil, 
   Trash2, 
   RefreshCw,
-  Loader2
+  Loader2,
+  Link as LinkIcon,
+  Unlink,
+  Download
 } from "lucide-react";
-import { getBanks, createBank, updateBank, deleteBank } from "@/lib/api";
+import { getBanks, createBank, updateBank, deleteBank, getAvailableAspsps, connectBankAccount, getConnectedBanks, syncBankTransactions, disconnectBank } from "@/lib/api";
 import { toast } from "sonner";
 
 const COLORS = [
@@ -32,17 +43,40 @@ const COLORS = [
 ];
 
 export default function Banks() {
+  const [searchParams] = useSearchParams();
   const [banks, setBanks] = useState([]);
+  const [connectedBanks, setConnectedBanks] = useState([]);
+  const [availableAspsps, setAvailableAspsps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [selectedAspsp, setSelectedAspsp] = useState("");
+  const [syncingAccount, setSyncingAccount] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     iban: "",
     balance: "0",
     color: "#064E3B"
   });
+
+  // Handle callback params
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const accounts = searchParams.get("accounts");
+    const error = searchParams.get("error");
+    
+    if (connected === "true") {
+      toast.success(`${accounts} compte(s) bancaire(s) connecté(s) !`);
+      // Clear URL params
+      window.history.replaceState({}, "", "/banks");
+    } else if (error) {
+      toast.error(`Erreur de connexion: ${error}`);
+      window.history.replaceState({}, "", "/banks");
+    }
+  }, [searchParams]);
 
   const fetchBanks = async () => {
     setLoading(true);
