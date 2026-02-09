@@ -859,13 +859,38 @@ async def auto_match_transactions(current_user: dict = Depends(get_current_user)
                 matches.append({
                     "transaction_amount": amount,
                     "tenant_name": best_match['name'],
-                    "score": best_score
+                    "score": best_score,
+                    "match_source": match_source
                 })
     
     return {
         "message": f"Auto-matched {len(matches)} transactions",
-        "matches": matches
+        "matches": matches,
+        "by_rule": len([m for m in matches if m.get("match_source") == "learned_rule"]),
+        "by_name": len([m for m in matches if m.get("match_source") == "name"])
     }
+
+# ==================== MATCHING RULES MANAGEMENT ====================
+
+@api_router.get("/matching-rules")
+async def get_matching_rules(current_user: dict = Depends(get_current_user)):
+    """Get all learned matching rules"""
+    rules = await db.matching_rules.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("match_count", -1).to_list(1000)
+    return rules
+
+@api_router.delete("/matching-rules/{rule_id}")
+async def delete_matching_rule(rule_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a matching rule"""
+    result = await db.matching_rules.delete_one({
+        "id": rule_id,
+        "user_id": current_user["id"]
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"message": "Rule deleted"}
 
 # ==================== PAYMENTS ROUTES ====================
 
