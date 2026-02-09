@@ -171,6 +171,44 @@ export default function Banks() {
     }
   };
 
+  const handleConnectBank = async () => {
+    if (!selectedAspsp) return;
+    setConnectLoading(true);
+    
+    try {
+      const response = await connectBankAccount(selectedAspsp, "FR");
+      // Redirect to bank authorization
+      window.location.href = response.data.auth_url;
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la connexion");
+      setConnectLoading(false);
+    }
+  };
+
+  const handleSyncTransactions = async (connectedBank, localBankId) => {
+    setSyncingAccount(connectedBank.id);
+    try {
+      const response = await syncBankTransactions(connectedBank.account_uid, localBankId);
+      toast.success(response.data.message);
+      fetchBanks();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la synchronisation");
+    } finally {
+      setSyncingAccount(null);
+    }
+  };
+
+  const handleDisconnectBank = async (connectedId) => {
+    if (!window.confirm("Déconnecter ce compte bancaire ?")) return;
+    try {
+      await disconnectBank(connectedId);
+      toast.success("Compte déconnecté");
+      fetchBanks();
+    } catch (error) {
+      toast.error("Erreur lors de la déconnexion");
+    }
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
