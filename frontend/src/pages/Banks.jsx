@@ -390,7 +390,72 @@ export default function Banks() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
+      {/* Connected Banks */}
+      {connectedBanks.length > 0 && (
+        <Card className="border-emerald-200 bg-emerald-50">
+          <CardHeader>
+            <CardTitle className="text-emerald-800" style={{ fontFamily: "Manrope" }}>
+              <LinkIcon className="w-5 h-5 inline mr-2" />
+              Comptes connectés via Open Banking
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {connectedBanks.map((connected) => (
+              <div 
+                key={connected.id}
+                className="flex items-center justify-between p-4 bg-white rounded-lg border border-emerald-200"
+                data-testid={`connected-bank-${connected.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">{connected.bank_name}</p>
+                    <p className="text-xs text-slate-500 font-mono">
+                      {connected.account_iban || connected.account_uid?.slice(0, 20)}...
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select 
+                    onValueChange={(bankId) => handleSyncTransactions(connected, bankId)}
+                  >
+                    <SelectTrigger className="w-[180px]" data-testid={`sync-select-${connected.id}`}>
+                      <SelectValue placeholder="Sync vers banque..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks.map((bank) => (
+                        <SelectItem key={bank.id} value={bank.id}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {syncingAccount === connected.id && (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDisconnectBank(connected.id)}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    data-testid={`disconnect-${connected.id}`}
+                  >
+                    <Unlink className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-emerald-700 mt-2">
+              Sélectionnez une banque locale pour importer les transactions
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Total Balance */}
       <Card className="border-slate-200 bg-gradient-to-br from-slate-900 to-slate-800">
@@ -423,7 +488,7 @@ export default function Banks() {
               <Building2 className="empty-state-icon" />
               <p className="empty-state-title">Aucune banque configurée</p>
               <p className="empty-state-text">
-                Ajoutez vos comptes bancaires pour commencer à suivre vos flux
+                Connectez votre banque via Open Banking ou ajoutez-en une manuellement
               </p>
             </div>
           </CardContent>
