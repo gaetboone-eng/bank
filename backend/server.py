@@ -206,11 +206,11 @@ def create_token(user_id: str) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS),
         "iat": datetime.now(timezone.utc)
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = pyjwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -219,10 +219,46 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+    except pyjwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+# ==================== ENABLE BANKING HELPERS ====================
+
+def create_enable_banking_jwt():
+    """Create JWT token for Enable Banking API"""
+    if not ENABLE_BANKING_APP_ID or not ENABLE_BANKING_PRIVATE_KEY:
+        raise HTTPException(status_code=400, detail="Enable Banking not configured")
+    
+    iat = int(datetime.now(timezone.utc).timestamp())
+    jwt_body = {
+        "iss": "enablebanking.com",
+        "aud": "api.enablebanking.com",
+        "iat": iat,
+        "exp": iat + 3600,
+    }
+    
+    # Handle private key - could be file path or raw key
+    private_key = ENABLE_BANKING_PRIVATE_KEY
+    if private_key.startswith("-----"):
+        # It's the raw key
+        pass
+    else:
+        # It's a file path - read it
+        try:
+            with open(private_key, 'r') as f:
+                private_key = f.read()
+        except:
+            pass
+    
+    token = pyjwt.encode(
+        jwt_body,
+        private_key,
+        algorithm="RS256",
+        headers={"kid": ENABLE_BANKING_APP_ID}
+    )
+    return token
 
 # ==================== AUTH ROUTES ====================
 
