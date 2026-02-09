@@ -1281,6 +1281,223 @@ async def disconnect_bank(connected_id: str, current_user: dict = Depends(get_cu
 async def root():
     return {"message": "Tenant Ledger API", "version": "1.0.0"}
 
+# ==================== SCHEDULED TASKS ====================
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler()
+
+async def scheduled_sync_and_match():
+    """Scheduled task to sync bank transactions and auto-match payments"""
+    logger.info("🔄 Starting scheduled sync and match...")
+    
+    try:
+        # Get all users with connected banks
+        users_with_banks = await db.connected_banks.distinct("user_id")
+        
+        for user_id in users_with_banks:
+            user = await db.users.find_one({"id": user_id})
+            if not user:
+                continue
+            
+            logger.info(f"Processing user: {user.get('email', user_id)}")
+            
+            # Get connected banks for this user
+            connected_banks = await db.connected_banks.find({"user_id": user_id}).to_list(100)
+            local_banks = await db.banks.find({"user_id": user_id}).to_list(100)
+            
+            if not local_banks:
+                continue
+            
+            # Use first local bank as default target
+            default_bank_id = local_banks[0]["id"]
+            
+            for connected in connected_banks:
+                account_uid = connected.get("account_uid")
+                if not account_uid:
+                    continue
+                
+                try:
+                    # Create Enable Banking JWT
+                    if not ENABLE_BANKING_APP_ID or not ENABLE_BANKING_PRIVATE_KEY:
+                        continue
+                    
+                    from cryptography.hazmat.primitives import serialization
+                    from cryptography.hazmat.backends import default_backend
+                    
+                    iat = int(datetime.now(timezone.utc).timestamp())
+                    jwt_body = {
+                        "iss": "enablebanking.com",
+                        "aud": "api.enablebanking.com",
+                        "iat": iat,
+                        "exp": iat + 3600,
+                    }
+                    
+                    if ENABLE_BANKING_PRIVATE_KEY.startswith("/") or ENABLE_BANKING_PRIVATE_KEY.endswith(".pem"):
+                        with open(ENABLE_BANKING_PRIVATE_KEY, 'rb') as f:
+                            key_data = f.read()
+                    else:
+                        key_data = ENABLE_BANKING_PRIVATE_KEY.encode('utf-8')
+                    
+                    private_key = serialization.load_pem_private_key(key_data, password=None, backend=default_backend())
+                    eb_jwt = pyjwt.encode(jwt_body, private_key, algorithm="RS256", headers={"kid": ENABLE_BANKING_APP_ID})
+                    
+                    headers = {"Authorization": f"Bearer {eb_jwt}"}
+                    
+                    # Fetch transactions from last 15 days
+                    date_from = (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%d")
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(
+                            f"https://api.enablebanking.com/accounts/{account_uid}/transactions?date_from={date_from}",
+                            headers=headers
+                        ) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                transactions = data.get("transactions", [])
+                                
+                                imported = 0
+                                for tx in transactions:
+                                    tx_ref = tx.get("entry_reference") or tx.get("transaction_id", "")
+                                    
+                                    # Check if already exists
+                                    existing = await db.transactions.find_one({
+                                        "user_id": user_id,
+                                        "reference": tx_ref
+                                    })
+                                    
+                                    if not existing and tx_ref:
+                                        amount_data = tx.get("transaction_amount", {})
+                                        amount = float(amount_data.get("amount", 0))
+                                        
+                                        if tx.get("credit_debit_indicator") == "DBIT":
+                                            amount = -abs(amount)
+                                        else:
+                                            amount = abs(amount)
+                                        
+                                        tx_date = tx.get("booking_date") or tx.get("value_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                                        
+                                        tx_id = str(uuid.uuid4())
+                                        await db.transactions.insert_one({
+                                            "id": tx_id,
+                                            "user_id": user_id,
+                                            "bank_id": default_bank_id,
+                                            "amount": amount,
+                                            "description": tx.get("remittance_information", ["Imported"])[0] if tx.get("remittance_information") else "Imported",
+                                            "transaction_date": f"{tx_date}T00:00:00Z",
+                                            "category": "rent" if amount > 0 else "expense",
+                                            "reference": tx_ref,
+                                            "matched_tenant_id": None,
+                                            "created_at": datetime.now(timezone.utc).isoformat(),
+                                            "source": "scheduled_sync"
+                                        })
+                                        imported += 1
+                                
+                                logger.info(f"  Imported {imported} new transactions for {connected.get('bank_name')}")
+                
+                except Exception as e:
+                    logger.error(f"  Error syncing {connected.get('bank_name')}: {str(e)}")
+            
+            # Now auto-match for this user
+            tenants = await db.tenants.find({"user_id": user_id}).to_list(1000)
+            unmatched_txs = await db.transactions.find({
+                "user_id": user_id,
+                "amount": {"$gt": 0},
+                "matched_tenant_id": None
+            }).to_list(1000)
+            
+            current_month = datetime.now(timezone.utc).strftime("%B")
+            current_year = datetime.now(timezone.utc).year
+            matched_count = 0
+            
+            for tx in unmatched_txs:
+                desc = tx.get('description', '')
+                amount = tx['amount']
+                
+                best_match = None
+                best_score = 0
+                
+                for tenant in tenants:
+                    rent = tenant.get('rent_amount', 0)
+                    if rent > 0:
+                        amount_diff = abs(amount - rent) / rent
+                        if amount_diff < 0.15:
+                            score = calculate_match_score(tenant['name'], desc)
+                            if amount_diff < 0.01:
+                                score += 5
+                            if score > best_score and score >= 10:
+                                best_score = score
+                                best_match = tenant
+                
+                if best_match:
+                    await db.transactions.update_one(
+                        {"id": tx['id']},
+                        {"$set": {"matched_tenant_id": best_match['id']}}
+                    )
+                    
+                    existing = await db.payments.find_one({
+                        "tenant_id": best_match['id'],
+                        "month": current_month,
+                        "year": current_year
+                    })
+                    
+                    if not existing:
+                        payment_id = str(uuid.uuid4())
+                        tx_date = tx.get('transaction_date', datetime.now(timezone.utc).isoformat())
+                        
+                        await db.payments.insert_one({
+                            "id": payment_id,
+                            "user_id": user_id,
+                            "tenant_id": best_match['id'],
+                            "amount": amount,
+                            "payment_date": tx_date,
+                            "bank_id": tx['bank_id'],
+                            "transaction_id": tx['id'],
+                            "month": current_month,
+                            "year": current_year,
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        
+                        await db.tenants.update_one(
+                            {"id": best_match['id']},
+                            {"$set": {"payment_status": "paid", "last_payment_date": tx_date}}
+                        )
+                        matched_count += 1
+            
+            logger.info(f"  Auto-matched {matched_count} payments for {user.get('email')}")
+        
+        logger.info("✅ Scheduled sync and match completed")
+    
+    except Exception as e:
+        logger.error(f"❌ Scheduled task error: {str(e)}")
+
+# Schedule the task to run on the 1st, 10th, and 20th of each month at 8:00 AM
+scheduler.add_job(
+    scheduled_sync_and_match,
+    CronTrigger(day='1,10,20', hour=8, minute=0),
+    id='sync_and_match',
+    replace_existing=True
+)
+
+# Also allow manual trigger via API
+@api_router.post("/admin/run-sync")
+async def manual_sync_trigger(current_user: dict = Depends(get_current_user)):
+    """Manually trigger sync and match process"""
+    await scheduled_sync_and_match()
+    return {"message": "Sync and match completed"}
+
+@api_router.get("/admin/scheduler-status")
+async def get_scheduler_status(current_user: dict = Depends(get_current_user)):
+    """Get scheduler status and next run times"""
+    jobs = []
+    for job in scheduler.get_jobs():
+        jobs.append({
+            "id": job.id,
+            "next_run": job.next_run_time.isoformat() if job.next_run_time else None
+        })
+    return {"running": scheduler.running, "jobs": jobs}
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -1292,6 +1509,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Start the scheduler on app startup"""
+    scheduler.start()
+    logger.info("🚀 Scheduler started - will sync on 1st, 10th, 20th of each month at 8:00 AM")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    scheduler.shutdown()
     client.close()
