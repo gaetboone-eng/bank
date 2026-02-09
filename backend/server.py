@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,7 +12,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
-import jwt
+import jwt as pyjwt
 import aiohttp
 
 ROOT_DIR = Path(__file__).parent
@@ -35,6 +36,11 @@ TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM', '')
 # Notion Config
 NOTION_API_KEY = os.environ.get('NOTION_API_KEY', '')
 NOTION_DATABASE_ID = os.environ.get('NOTION_DATABASE_ID', '')
+
+# Enable Banking Config
+ENABLE_BANKING_APP_ID = os.environ.get('ENABLE_BANKING_APP_ID', '')
+ENABLE_BANKING_PRIVATE_KEY = os.environ.get('ENABLE_BANKING_PRIVATE_KEY', '')
+ENABLE_BANKING_REDIRECT_URL = os.environ.get('ENABLE_BANKING_REDIRECT_URL', '')
 
 # Create the main app
 app = FastAPI(title="Tenant Ledger - Banking Assistant")
