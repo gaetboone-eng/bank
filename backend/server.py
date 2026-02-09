@@ -458,7 +458,7 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                     if "Address" in props and props["Address"].get("rich_text"):
                         address = props["Address"]["rich_text"][0]["plain_text"] if props["Address"]["rich_text"] else ""
                     
-                    rent = props.get("Rent", {}).get("number", 0) or props.get("Rent Amount", {}).get("number", 0) or 0
+                    rent = props.get("Loyer Mensuel", {}).get("number", 0) or props.get("Rent", {}).get("number", 0) or props.get("Rent Amount", {}).get("number", 0) or 0
                     due_day = props.get("Due Day", {}).get("number", 1) or 1
                     
                     if name:
