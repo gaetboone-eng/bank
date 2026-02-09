@@ -768,8 +768,11 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
             "user_id": current_user["id"],
             "notion_api_key": "",
             "notion_database_id": "",
-            "twilio_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN)
+            "twilio_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN),
+            "enable_banking_configured": bool(ENABLE_BANKING_APP_ID and ENABLE_BANKING_PRIVATE_KEY)
         }
+    else:
+        settings["enable_banking_configured"] = bool(ENABLE_BANKING_APP_ID and ENABLE_BANKING_PRIVATE_KEY)
     return settings
 
 class SettingsUpdate(BaseModel):
@@ -787,6 +790,344 @@ async def update_settings(settings_data: SettingsUpdate, current_user: dict = De
         upsert=True
     )
     return {"message": "Settings updated"}
+
+# ==================== ENABLE BANKING ROUTES ====================
+
+@api_router.get("/banking/aspsps")
+async def get_available_banks(country: str = "FR", current_user: dict = Depends(get_current_user)):
+    """Get list of available banks for a country"""
+    try:
+        eb_jwt = create_enable_banking_jwt()
+        headers = {"Authorization": f"Bearer {eb_jwt}"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.enablebanking.com/aspsps?country={country}",
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=response.status, detail=f"Enable Banking API error: {error_text}")
+                
+                data = await response.json()
+                return data.get("aspsps", [])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching banks: {str(e)}")
+
+@api_router.post("/banking/connect")
+async def connect_bank_account(
+    bank_name: str,
+    bank_country: str = "FR",
+    current_user: dict = Depends(get_current_user)
+):
+    """Start bank connection authorization flow"""
+    try:
+        eb_jwt = create_enable_banking_jwt()
+        headers = {
+            "Authorization": f"Bearer {eb_jwt}",
+            "Content-Type": "application/json"
+        }
+        
+        # Generate unique state for this authorization
+        state = str(uuid.uuid4())
+        
+        # Store state in database to verify callback
+        await db.banking_auth_states.insert_one({
+            "state": state,
+            "user_id": current_user["id"],
+            "bank_name": bank_name,
+            "bank_country": bank_country,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        body = {
+            "access": {
+                "valid_until": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat()
+            },
+            "aspsp": {
+                "name": bank_name,
+                "country": bank_country
+            },
+            "state": state,
+            "redirect_url": ENABLE_BANKING_REDIRECT_URL,
+            "psu_type": "personal"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.enablebanking.com/auth",
+                json=body,
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=response.status, detail=f"Enable Banking API error: {error_text}")
+                
+                data = await response.json()
+                return {"auth_url": data.get("url"), "state": state}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error initiating bank connection: {str(e)}")
+
+@api_router.get("/banking/callback")
+async def banking_callback(code: str = Query(...), state: str = Query(...)):
+    """Handle callback from bank authorization"""
+    try:
+        # Verify state
+        auth_state = await db.banking_auth_states.find_one({"state": state})
+        if not auth_state:
+            raise HTTPException(status_code=400, detail="Invalid state")
+        
+        user_id = auth_state["user_id"]
+        bank_name = auth_state["bank_name"]
+        bank_country = auth_state["bank_country"]
+        
+        eb_jwt = create_enable_banking_jwt()
+        headers = {
+            "Authorization": f"Bearer {eb_jwt}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create session with the code
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.enablebanking.com/sessions",
+                json={"code": code},
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    # Redirect to frontend with error
+                    frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "")
+                    return RedirectResponse(url=f"{frontend_url}/banks?error=authorization_failed")
+                
+                session_data = await response.json()
+                
+                # Store connected bank session
+                session_id = session_data.get("session_id")
+                accounts = session_data.get("accounts", [])
+                
+                for account in accounts:
+                    connected_bank_id = str(uuid.uuid4())
+                    await db.connected_banks.insert_one({
+                        "id": connected_bank_id,
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "account_uid": account.get("uid"),
+                        "account_iban": account.get("account_id", {}).get("iban", ""),
+                        "bank_name": bank_name,
+                        "bank_country": bank_country,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "valid_until": session_data.get("access", {}).get("valid_until", "")
+                    })
+                
+                # Clean up state
+                await db.banking_auth_states.delete_one({"state": state})
+                
+                # Redirect to frontend success
+                frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "")
+                return RedirectResponse(url=f"{frontend_url}/banks?connected=true&accounts={len(accounts)}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "") if ENABLE_BANKING_REDIRECT_URL else ""
+        return RedirectResponse(url=f"{frontend_url}/banks?error={str(e)}")
+
+@api_router.get("/banking/connected")
+async def get_connected_banks(current_user: dict = Depends(get_current_user)):
+    """Get list of connected bank accounts"""
+    connected = await db.connected_banks.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).to_list(100)
+    return connected
+
+@api_router.get("/banking/accounts/{account_uid}/balances")
+async def get_account_balances(account_uid: str, current_user: dict = Depends(get_current_user)):
+    """Get balances for a connected account"""
+    # Verify account belongs to user
+    connected = await db.connected_banks.find_one({
+        "account_uid": account_uid,
+        "user_id": current_user["id"]
+    })
+    if not connected:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    try:
+        eb_jwt = create_enable_banking_jwt()
+        headers = {"Authorization": f"Bearer {eb_jwt}"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.enablebanking.com/accounts/{account_uid}/balances",
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=response.status, detail=f"Error fetching balances: {error_text}")
+                
+                return await response.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@api_router.get("/banking/accounts/{account_uid}/transactions")
+async def get_account_transactions(
+    account_uid: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get transactions for a connected account"""
+    # Verify account belongs to user
+    connected = await db.connected_banks.find_one({
+        "account_uid": account_uid,
+        "user_id": current_user["id"]
+    })
+    if not connected:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    try:
+        eb_jwt = create_enable_banking_jwt()
+        headers = {"Authorization": f"Bearer {eb_jwt}"}
+        
+        url = f"https://api.enablebanking.com/accounts/{account_uid}/transactions"
+        params = {}
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=response.status, detail=f"Error fetching transactions: {error_text}")
+                
+                data = await response.json()
+                return data.get("transactions", [])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@api_router.post("/banking/sync-transactions/{account_uid}")
+async def sync_bank_transactions(account_uid: str, bank_id: str, current_user: dict = Depends(get_current_user)):
+    """Sync transactions from connected bank account to local bank"""
+    # Verify connected account belongs to user
+    connected = await db.connected_banks.find_one({
+        "account_uid": account_uid,
+        "user_id": current_user["id"]
+    })
+    if not connected:
+        raise HTTPException(status_code=404, detail="Connected account not found")
+    
+    # Verify local bank belongs to user
+    bank = await db.banks.find_one({"id": bank_id, "user_id": current_user["id"]})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    
+    try:
+        eb_jwt = create_enable_banking_jwt()
+        headers = {"Authorization": f"Bearer {eb_jwt}"}
+        
+        # Get transactions from last 30 days
+        date_from = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.enablebanking.com/accounts/{account_uid}/transactions?date_from={date_from}",
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=response.status, detail=f"Error fetching transactions: {error_text}")
+                
+                data = await response.json()
+                transactions = data.get("transactions", [])
+                
+                imported_count = 0
+                for tx in transactions:
+                    # Check if transaction already exists (by reference)
+                    tx_ref = tx.get("entry_reference") or tx.get("transaction_id", "")
+                    existing = await db.transactions.find_one({
+                        "user_id": current_user["id"],
+                        "reference": tx_ref
+                    })
+                    
+                    if not existing and tx_ref:
+                        # Parse amount
+                        amount_data = tx.get("transaction_amount", {})
+                        amount = float(amount_data.get("amount", 0))
+                        
+                        # Determine if credit or debit
+                        if tx.get("credit_debit_indicator") == "DBIT":
+                            amount = -abs(amount)
+                        else:
+                            amount = abs(amount)
+                        
+                        # Parse date
+                        tx_date = tx.get("booking_date") or tx.get("value_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                        
+                        # Create transaction
+                        tx_id = str(uuid.uuid4())
+                        tx_doc = {
+                            "id": tx_id,
+                            "user_id": current_user["id"],
+                            "bank_id": bank_id,
+                            "amount": amount,
+                            "description": tx.get("remittance_information", ["Imported transaction"])[0] if tx.get("remittance_information") else "Imported transaction",
+                            "transaction_date": f"{tx_date}T00:00:00Z",
+                            "category": "rent" if amount > 0 else "expense",
+                            "reference": tx_ref,
+                            "matched_tenant_id": None,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "source": "enable_banking"
+                        }
+                        await db.transactions.insert_one(tx_doc)
+                        imported_count += 1
+                
+                # Update bank balance with latest
+                async with session.get(
+                    f"https://api.enablebanking.com/accounts/{account_uid}/balances",
+                    headers=headers
+                ) as bal_response:
+                    if bal_response.status == 200:
+                        bal_data = await bal_response.json()
+                        balances = bal_data.get("balances", [])
+                        if balances:
+                            # Get available or booked balance
+                            for bal in balances:
+                                if bal.get("balance_type") in ["closingAvailable", "interimAvailable", "closingBooked"]:
+                                    new_balance = float(bal.get("balance_amount", {}).get("amount", 0))
+                                    await db.banks.update_one(
+                                        {"id": bank_id},
+                                        {"$set": {"balance": new_balance}}
+                                    )
+                                    break
+                
+                return {"message": f"Imported {imported_count} new transactions", "count": imported_count}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error syncing transactions: {str(e)}")
+
+@api_router.delete("/banking/connected/{connected_id}")
+async def disconnect_bank(connected_id: str, current_user: dict = Depends(get_current_user)):
+    """Disconnect a bank account"""
+    result = await db.connected_banks.delete_one({
+        "id": connected_id,
+        "user_id": current_user["id"]
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Connected bank not found")
+    return {"message": "Bank disconnected"}
 
 # ==================== ROOT ====================
 
