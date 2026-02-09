@@ -10,9 +10,11 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Loader2
 } from "lucide-react";
-import { getDashboardStats, getTenants, getBanks } from "@/lib/api";
+import { getDashboardStats, getTenants, getBanks, autoMatchTransactions } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function Dashboard() {
@@ -20,6 +22,7 @@ export default function Dashboard() {
   const [tenants, setTenants] = useState([]);
   const [banks, setBanks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [matching, setMatching] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -36,6 +39,24 @@ export default function Dashboard() {
       toast.error("Erreur lors du chargement des données");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAutoMatch = async () => {
+    setMatching(true);
+    try {
+      const response = await autoMatchTransactions();
+      const { matches } = response.data;
+      if (matches.length > 0) {
+        toast.success(`${matches.length} paiement(s) associé(s) automatiquement !`);
+        fetchData(); // Refresh data
+      } else {
+        toast.info("Aucune nouvelle correspondance trouvée");
+      }
+    } catch (error) {
+      toast.error("Erreur lors du matching automatique");
+    } finally {
+      setMatching(false);
     }
   };
 
