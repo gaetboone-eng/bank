@@ -39,6 +39,9 @@ export const sendWhatsAppNotification = (tenantId, message) =>
 export const getSettings = () => axios.get(`${API}/settings`);
 export const updateSettings = (data) => axios.put(`${API}/settings`, data);
 
+// Auto-matching
+export const autoMatchTransactions = () => axios.post(`${API}/transactions/auto-match`);
+
 // Enable Banking - Open Banking
 export const getAvailableAspsps = (country = "FR") => 
   axios.get(`${API}/banking/aspsps`, { params: { country } });
