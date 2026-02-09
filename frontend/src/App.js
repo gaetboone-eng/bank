@@ -10,6 +10,7 @@ import TenantDetail from "@/pages/TenantDetail";
 import Banks from "@/pages/Banks";
 import Transactions from "@/pages/Transactions";
 import Settings from "@/pages/Settings";
+import MonthlyReport from "@/pages/MonthlyReport";
 import Layout from "@/components/Layout";
 
 const ProtectedRoute = ({ children }) => {
