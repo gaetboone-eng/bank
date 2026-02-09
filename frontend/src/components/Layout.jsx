@@ -8,13 +8,15 @@ import {
   Settings, 
   LogOut,
   Menu,
-  X
+  X,
+  CalendarDays
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Tableau de bord" },
+  { to: "/monthly-report", icon: CalendarDays, label: "Rapport mensuel" },
   { to: "/tenants", icon: Users, label: "Locataires" },
   { to: "/banks", icon: Building2, label: "Banques" },
   { to: "/transactions", icon: ArrowLeftRight, label: "Transactions" },
