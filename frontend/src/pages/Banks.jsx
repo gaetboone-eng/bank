@@ -81,8 +81,12 @@ export default function Banks() {
   const fetchBanks = async () => {
     setLoading(true);
     try {
-      const response = await getBanks();
-      setBanks(response.data);
+      const [banksRes, connectedRes] = await Promise.all([
+        getBanks(),
+        getConnectedBanks()
+      ]);
+      setBanks(banksRes.data);
+      setConnectedBanks(connectedRes.data);
     } catch (error) {
       toast.error("Erreur lors du chargement des banques");
     } finally {
@@ -90,8 +94,18 @@ export default function Banks() {
     }
   };
 
+  const fetchAvailableAspsps = async () => {
+    try {
+      const response = await getAvailableAspsps("FR");
+      setAvailableAspsps(response.data);
+    } catch (error) {
+      console.error("Error fetching ASPSPs:", error);
+    }
+  };
+
   useEffect(() => {
     fetchBanks();
+    fetchAvailableAspsps();
   }, []);
 
   const openEditDialog = (bank) => {
