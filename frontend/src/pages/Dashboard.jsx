@@ -94,10 +94,24 @@ export default function Dashboard() {
             Vue d'ensemble de vos locations
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          onClick={fetchData}
-          data-testid="refresh-dashboard-btn"
+        <div className="flex gap-3">
+          <Button 
+            onClick={handleAutoMatch}
+            disabled={matching}
+            className="bg-emerald-900 hover:bg-emerald-800"
+            data-testid="auto-match-btn"
+          >
+            {matching ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4 mr-2" />
+            )}
+            Matching auto
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={fetchData}
+            data-testid="refresh-dashboard-btn"
         >
           <RefreshCw className="w-4 h-4 mr-2" />
           Actualiser
