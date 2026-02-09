@@ -112,10 +112,11 @@ export default function Dashboard() {
             variant="outline" 
             onClick={fetchData}
             data-testid="refresh-dashboard-btn"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Actualiser
-        </Button>
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Actualiser
+          </Button>
+        </div>
       </div>
 
       {/* Stats Grid - Bento Style */}
