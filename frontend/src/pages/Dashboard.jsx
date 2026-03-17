@@ -115,52 +115,58 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in" data-testid="dashboard-page">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in" data-testid="dashboard-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight" style={{ fontFamily: "Manrope" }}>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight" style={{ fontFamily: "Manrope" }}>
             Tableau de bord
           </h1>
-          <p className="text-slate-500 mt-1">
+          <p className="text-sm sm:text-base text-slate-500 mt-1">
             Vue d'ensemble de vos locations
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <Button 
             onClick={handleManualSync}
             disabled={syncing}
             variant="outline"
-            className="gap-2"
+            className="gap-2 flex-1 sm:flex-none text-sm"
             data-testid="sync-btn"
+            size="sm"
           >
             {syncing ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Synchronisation...
+                <span className="hidden sm:inline">Synchronisation...</span>
+                <span className="sm:hidden">Sync...</span>
               </>
             ) : (
               <>
                 <RefreshCw className="w-4 h-4" />
-                Synchroniser
+                <span className="hidden sm:inline">Synchroniser</span>
+                <span className="sm:hidden">Sync</span>
               </>
             )}
           </Button>
           <Button 
             onClick={handleAutoMatch}
             disabled={matching}
-            className="bg-emerald-900 hover:bg-emerald-800 gap-2"
+            className="bg-emerald-900 hover:bg-emerald-800 gap-2 flex-1 sm:flex-none text-sm"
             data-testid="match-btn"
+            size="sm"
           >
             {matching ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Matching...
+                <span className="hidden sm:inline">Matching...</span>
+                <span className="sm:hidden">Match...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Associer paiements
+                <span className="hidden sm:inline">Associer paiements</span>
+                <span className="sm:hidden">Associer</span>
               </>
             )}
           </Button>
@@ -168,19 +174,19 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid - Bento Style */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {/* Total Tenants */}
         <Card className="border-slate-200" data-testid="stat-total-tenants">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Locataires</p>
-                <p className="text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs sm:text-sm text-slate-500">Locataires</p>
+                <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
                   {stats?.total_tenants || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                <Users className="w-6 h-6 text-slate-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <Users className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600" />
               </div>
             </div>
           </CardContent>
@@ -188,16 +194,16 @@ export default function Dashboard() {
 
         {/* Paid */}
         <Card className="border-slate-200" data-testid="stat-paid-tenants">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Loyers payés</p>
-                <p className="text-3xl font-bold text-emerald-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs sm:text-sm text-slate-500">Loyers payés</p>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-900 mt-1" style={{ fontFamily: "Manrope" }}>
                   {stats?.paid_tenants || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-700" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-700" />
               </div>
             </div>
           </CardContent>
@@ -205,16 +211,16 @@ export default function Dashboard() {
 
         {/* Unpaid */}
         <Card className="border-slate-200" data-testid="stat-unpaid-tenants">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Loyers impayés</p>
-                <p className="text-3xl font-bold text-orange-500 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs sm:text-sm text-slate-500">Loyers impayés</p>
+                <p className="text-2xl sm:text-3xl font-bold text-orange-500 mt-1" style={{ fontFamily: "Manrope" }}>
                   {stats?.unpaid_tenants || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-orange-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-100 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
               </div>
             </div>
           </CardContent>
@@ -222,16 +228,16 @@ export default function Dashboard() {
 
         {/* Banks */}
         <Card className="border-slate-200" data-testid="stat-banks">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Comptes bancaires</p>
-                <p className="text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs sm:text-sm text-slate-500">Comptes bancaires</p>
+                <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
                   {stats?.banks_count || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-slate-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600" />
               </div>
             </div>
           </CardContent>
@@ -273,18 +279,18 @@ export default function Dashboard() {
               
               {/* Unpaid Tenants List */}
               {structureStats.overall.unpaid > 0 && (
-                <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="mt-4 p-3 sm:p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
                     <AlertCircle className="w-4 h-4 text-orange-600" />
-                    <h4 className="font-semibold text-orange-900">
+                    <h4 className="text-sm sm:text-base font-semibold text-orange-900">
                       Locataires en attente ({structureStats.overall.unpaid})
                     </h4>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {structureStats.overall.unpaid_names.map((name, idx) => (
                       <span 
                         key={idx}
-                        className="px-3 py-1 bg-white text-orange-700 rounded-full text-sm border border-orange-200"
+                        className="px-2 sm:px-3 py-0.5 sm:py-1 bg-white text-orange-700 rounded-full text-xs sm:text-sm border border-orange-200"
                       >
                         {name}
                       </span>
