@@ -1979,12 +1979,19 @@ async def manual_sync(current_user: dict = Depends(get_current_user)):
         total_transactions = 0
         for bank in connected_banks:
             try:
-                # Fetch recent transactions (last 30 days)
-                from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-                tx_result = await sync_bank_transactions(bank["account_uid"], current_user, from_date=from_date)
-                total_transactions += tx_result.get("new_count", 0)
+                # Fetch recent transactions - sync_bank_transactions fetches last 30 days by default
+                # We need a bank_id - find the corresponding manual bank
+                bank_doc = await db.banks.find_one({
+                    **get_filter_for_user(current_user),
+                    "iban": bank["account_iban"]
+                }, {"_id": 0})
+                
+                bank_id = bank_doc["id"] if bank_doc else None
+                if bank_id:
+                    tx_result = await sync_bank_transactions(bank["account_uid"], bank_id, current_user)
+                    total_transactions += tx_result.get("new_count", 0)
             except Exception as e:
-                logger.error(f"Error syncing bank {bank.get('name')}: {e}")
+                logger.error(f"Error syncing bank {bank.get('bank_name')}: {e}")
         
         results["bank_sync"]["success"] = True
         results["bank_sync"]["count"] = total_transactions
