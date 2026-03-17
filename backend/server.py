@@ -1448,13 +1448,19 @@ async def connect_bank_account(
         state = str(uuid.uuid4())
         
         # Store state in database to verify callback
-        await db.banking_auth_states.insert_one({
+        auth_state_doc = {
             "state": state,
-            **get_filter_for_user(current_user),
+            "user_id": current_user["id"],
             "bank_name": bank_name,
             "bank_country": bank_country,
             "created_at": datetime.now(timezone.utc).isoformat()
-        })
+        }
+        
+        # Add organization_id if user belongs to one
+        if current_user.get("organization_id"):
+            auth_state_doc["organization_id"] = current_user["organization_id"]
+        
+        await db.banking_auth_states.insert_one(auth_state_doc)
         
         body = {
             "access": {
@@ -1496,6 +1502,7 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
             raise HTTPException(status_code=400, detail="Invalid state")
         
         user_id = auth_state["user_id"]
+        organization_id = auth_state.get("organization_id")
         bank_name = auth_state["bank_name"]
         bank_country = auth_state["bank_country"]
         
@@ -1526,7 +1533,7 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
                 
                 for account in accounts:
                     connected_bank_id = str(uuid.uuid4())
-                    await db.connected_banks.insert_one({
+                    connected_bank_doc = {
                         "id": connected_bank_id,
                         "user_id": user_id,
                         "session_id": session_id,
@@ -1536,7 +1543,13 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
                         "bank_country": bank_country,
                         "created_at": datetime.now(timezone.utc).isoformat(),
                         "valid_until": session_data.get("access", {}).get("valid_until", "")
-                    })
+                    }
+                    
+                    # Add organization_id if user belongs to one
+                    if organization_id:
+                        connected_bank_doc["organization_id"] = organization_id
+                    
+                    await db.connected_banks.insert_one(connected_bank_doc)
                 
                 # Clean up state
                 await db.banking_auth_states.delete_one({"state": state})
