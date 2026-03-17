@@ -1798,6 +1798,120 @@ async def scheduled_sync_and_match():
             default_bank_id = local_banks[0]["id"]
             
             for connected in connected_banks:
+                # Process connected bank
+                logger.info(f"Processing connected bank: {connected.get('bank_name')}")
+
+@api_router.post("/banking/import-all")
+async def import_all_enable_banking_accounts(current_user: dict = Depends(get_current_user)):
+    """
+    Import all bank accounts from Enable Banking sessions.
+    This will create bank entries for all connected accounts that aren't already in the system.
+    """
+    try:
+        filter_query = get_filter_for_user(current_user)
+        
+        # Get all connected banks from Enable Banking
+        connected_banks = await db.connected_banks.find(
+            filter_query,
+            {"_id": 0}
+        ).to_list(100)
+        
+        if not connected_banks:
+            return {
+                "message": "No connected banks found",
+                "imported": 0,
+                "existing": 0
+            }
+        
+        imported_count = 0
+        existing_count = 0
+        banks_created = []
+        
+        eb_jwt = create_enable_banking_jwt()
+        headers = {
+            "Authorization": f"Bearer {eb_jwt}",
+            "Content-Type": "application/json"
+        }
+        
+        for connected in connected_banks:
+            account_uid = connected.get("account_uid")
+            account_iban = connected.get("account_iban", "")
+            bank_name = connected.get("bank_name", "Unknown Bank")
+            session_id = connected.get("session_id")
+            
+            # Check if bank already exists with this IBAN
+            existing_bank = await db.banks.find_one({
+                **filter_query,
+                "iban": account_iban
+            }, {"_id": 0})
+            
+            if existing_bank:
+                existing_count += 1
+                continue
+            
+            # Fetch account details from Enable Banking to get current balance
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # Get account info
+                    async with session.get(
+                        f"https://api.enablebanking.com/accounts/{account_uid}",
+                        headers=headers
+                    ) as response:
+                        if response.status == 200:
+                            account_data = await response.json()
+                            
+                            # Extract balance
+                            balance = 0.0
+                            balances = account_data.get("balances", [])
+                            if balances:
+                                # Try to get the closingBooked balance first, then available
+                                for bal in balances:
+                                    if bal.get("balanceType") == "closingBooked":
+                                        balance = float(bal.get("balanceAmount", {}).get("amount", 0))
+                                        break
+                                    elif bal.get("balanceType") == "expected":
+                                        balance = float(bal.get("balanceAmount", {}).get("amount", 0))
+                            
+                            # Create bank entry
+                            bank_id = str(uuid.uuid4())
+                            bank_doc = {
+                                "id": bank_id,
+                                "user_id": current_user["id"],
+                                "name": f"{bank_name} {account_iban[-4:] if account_iban else ''}",
+                                "iban": account_iban,
+                                "balance": balance,
+                                "color": "#10B981",  # Green for imported banks
+                                "created_at": datetime.now(timezone.utc).isoformat(),
+                                "enable_banking_account_uid": account_uid,
+                                "enable_banking_session_id": session_id
+                            }
+                            
+                            # Add organization_id if user belongs to one
+                            if current_user.get("organization_id"):
+                                bank_doc["organization_id"] = current_user["organization_id"]
+                            
+                            await db.banks.insert_one(bank_doc)
+                            banks_created.append(bank_doc)
+                            imported_count += 1
+                            
+                            logger.info(f"Imported bank: {bank_name} - {account_iban}")
+                        else:
+                            logger.error(f"Failed to fetch account {account_uid}: {response.status}")
+            except Exception as e:
+                logger.error(f"Error importing account {account_uid}: {str(e)}")
+                continue
+        
+        return {
+            "message": f"Import completed: {imported_count} new bank(s), {existing_count} already exist",
+            "imported": imported_count,
+            "existing": existing_count,
+            "banks": banks_created
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in import_all_enable_banking_accounts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
                 account_uid = connected.get("account_uid")
                 if not account_uid:
                     continue

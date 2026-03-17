@@ -65,3 +65,8 @@ export const getPaymentStatsByStructure = () => axios.get(`${API}/payments/stats
 
 // Manual Sync
 export const manualSync = () => axios.post(`${API}/sync/manual`);
+
+
+// Import all Enable Banking accounts
+export const importAllBanks = () => axios.post(`${API}/banking/import-all`);
+

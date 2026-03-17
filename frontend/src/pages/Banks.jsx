@@ -30,7 +30,7 @@ import {
   Unlink,
   Download
 } from "lucide-react";
-import { getBanks, createBank, updateBank, deleteBank, getAvailableAspsps, connectBankAccount, getConnectedBanks, syncBankTransactions, disconnectBank } from "@/lib/api";
+import { getBanks, createBank, updateBank, deleteBank, getAvailableAspsps, connectBankAccount, getConnectedBanks, syncBankTransactions, disconnectBank, importAllBanks } from "@/lib/api";
 import { toast } from "sonner";
 
 const COLORS = [
@@ -100,6 +100,25 @@ export default function Banks() {
       setAvailableAspsps(response.data);
     } catch (error) {
       console.error("Error fetching ASPSPs:", error);
+    }
+  };
+
+
+
+  const handleImportAll = async () => {
+    try {
+      const response = await importAllBanks();
+      const { imported, existing } = response.data;
+      if (imported > 0) {
+        toast.success(`${imported} banque(s) importée(s) depuis Enable Banking !`);
+        fetchBanks();
+      } else if (existing > 0) {
+        toast.info(`Toutes vos banques Enable Banking sont déjà importées (${existing})`);
+      } else {
+        toast.info("Aucune banque Enable Banking trouvée à importer");
+      }
+    } catch (error) {
+      toast.error("Erreur lors de l'import des banques");
     }
   };
 
@@ -231,6 +250,15 @@ export default function Banks() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Button 
+            onClick={handleImportAll}
+            variant="outline"
+            className="gap-2"
+            data-testid="import-banks-btn"
+          >
+            <Download className="w-4 h-4" />
+            Importer mes banques
+          </Button>
           {/* Connect Bank Dialog */}
           <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
             <DialogTrigger asChild>
