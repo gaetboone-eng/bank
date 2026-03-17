@@ -1501,7 +1501,10 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
         if not auth_state:
             raise HTTPException(status_code=400, detail="Invalid state")
         
-        user_id = auth_state["user_id"]
+        user_id = auth_state.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Invalid auth state: missing user_id")
+        
         organization_id = auth_state.get("organization_id")
         bank_name = auth_state["bank_name"]
         bank_country = auth_state["bank_country"]
