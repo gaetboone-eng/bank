@@ -14,27 +14,31 @@ import {
   Sparkles,
   Loader2
 } from "lucide-react";
-import { getDashboardStats, getTenants, getBanks, autoMatchTransactions } from "@/lib/api";
+import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [structureStats, setStructureStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, tenantsRes, banksRes] = await Promise.all([
+      const [statsRes, tenantsRes, banksRes, structureRes] = await Promise.all([
         getDashboardStats(),
         getTenants(),
-        getBanks()
+        getBanks(),
+        getPaymentStatsByStructure()
       ]);
       setStats(statsRes.data);
       setTenants(tenantsRes.data);
       setBanks(banksRes.data);
+      setStructureStats(structureRes.data);
     } catch (error) {
       toast.error("Erreur lors du chargement des données");
     } finally {
@@ -49,7 +53,7 @@ export default function Dashboard() {
       const { matches } = response.data;
       if (matches.length > 0) {
         toast.success(`${matches.length} paiement(s) associé(s) automatiquement !`);
-        fetchData(); // Refresh data
+        fetchData();
       } else {
         toast.info("Aucune nouvelle correspondance trouvée");
       }
@@ -60,8 +64,35 @@ export default function Dashboard() {
     }
   };
 
+  const handleManualSync = async () => {
+    setSyncing(true);
+    try {
+      const response = await manualSync();
+      const results = response.data.results;
+      
+      let message = "Synchronisation terminée : ";
+      if (results.notion_sync.success) {
+        message += `${results.notion_sync.count} locataires`;
+      }
+      if (results.bank_sync.success) {
+        message += `, ${results.bank_sync.count} transactions`;
+      }
+      if (results.matching.success) {
+        message += `, ${results.matching.count} matchés`;
+      }
+      
+      toast.success(message);
+      fetchData();
+    } catch (error) {
+      toast.error("Erreur lors de la synchronisation");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formatCurrency = (amount) => {
@@ -96,25 +127,41 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-3">
           <Button 
-            onClick={handleAutoMatch}
-            disabled={matching}
-            className="bg-emerald-900 hover:bg-emerald-800"
-            data-testid="auto-match-btn"
+            onClick={handleManualSync}
+            disabled={syncing}
+            variant="outline"
+            className="gap-2"
+            data-testid="sync-btn"
           >
-            {matching ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {syncing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Synchronisation...
+              </>
             ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Synchroniser
+              </>
             )}
-            Matching auto
           </Button>
           <Button 
-            variant="outline" 
-            onClick={fetchData}
-            data-testid="refresh-dashboard-btn"
+            onClick={handleAutoMatch}
+            disabled={matching}
+            className="bg-emerald-900 hover:bg-emerald-800 gap-2"
+            data-testid="match-btn"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Actualiser
+            {matching ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Matching...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Associer paiements
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -189,6 +236,120 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Progress Bars Section */}
+      {structureStats && (
+        <div className="space-y-6">
+          {/* Overall Progress */}
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2" style={{ fontFamily: "Manrope" }}>
+                <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+                Progression globale des paiements
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {structureStats.overall.paid} / {structureStats.overall.total} locataires ont payé
+                </span>
+                <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>
+                  {structureStats.overall.percentage}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-6">
+                <div 
+                  className="bg-emerald-600 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-3"
+                  style={{ width: `${structureStats.overall.percentage}%` }}
+                >
+                  {structureStats.overall.percentage > 10 && (
+                    <span className="text-white text-xs font-semibold">
+                      {structureStats.overall.percentage}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Unpaid Tenants List */}
+              {structureStats.overall.unpaid > 0 && (
+                <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                    <h4 className="font-semibold text-orange-900">
+                      Locataires en attente ({structureStats.overall.unpaid})
+                    </h4>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {structureStats.overall.unpaid_names.map((name, idx) => (
+                      <span 
+                        key={idx}
+                        className="px-3 py-1 bg-white text-orange-700 rounded-full text-sm border border-orange-200"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Progress by Structure */}
+          {structureStats.by_structure.length > 1 && (
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2" style={{ fontFamily: "Manrope" }}>
+                  <Building2 className="w-5 h-5 text-slate-700" />
+                  Progression par structure
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {structureStats.by_structure.map((structure, idx) => (
+                  <div key={idx} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-slate-900">{structure.name}</h4>
+                        <p className="text-sm text-slate-500">
+                          {structure.paid} / {structure.total} locataires
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>
+                        {structure.percentage}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-4">
+                      <div 
+                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
+                        style={{ width: `${structure.percentage}%` }}
+                      />
+                    </div>
+                    
+                    {/* Unpaid tenants for this structure */}
+                    {structure.unpaid > 0 && (
+                      <div className="ml-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-xs text-slate-600 font-medium mb-2">
+                          En attente ({structure.unpaid}) :
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {structure.unpaid_tenants.map((tenant, tidx) => (
+                            <span 
+                              key={tidx}
+                              className="px-2 py-1 bg-white text-slate-700 rounded text-xs border border-slate-300"
+                            >
+                              {tenant.name} ({formatCurrency(tenant.rent_amount)})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
 
       {/* Financial Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

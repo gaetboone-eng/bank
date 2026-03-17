@@ -58,3 +58,10 @@ export const syncBankTransactions = (accountUid, bankId) =>
   axios.post(`${API}/banking/sync-transactions/${accountUid}`, null, { params: { bank_id: bankId } });
 export const disconnectBank = (connectedId) => 
   axios.delete(`${API}/banking/connected/${connectedId}`);
+
+
+// Payment Statistics
+export const getPaymentStatsByStructure = () => axios.get(`${API}/payments/stats-by-structure`);
+
+// Manual Sync
+export const manualSync = () => axios.post(`${API}/sync/manual`);

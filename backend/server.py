@@ -129,6 +129,7 @@ class TenantResponse(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     property_address: str
+    structure: Optional[str] = "Non défini"
     rent_amount: float
     due_day: int
     notion_id: Optional[str] = None
@@ -509,6 +510,19 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                     if "Address" in props and props["Address"].get("rich_text"):
                         address = props["Address"]["rich_text"][0]["plain_text"] if props["Address"]["rich_text"] else ""
                     
+                    # Extract structure/building information
+                    structure = ""
+                    if "Structure" in props and props["Structure"].get("rich_text"):
+                        structure = props["Structure"]["rich_text"][0]["plain_text"] if props["Structure"]["rich_text"] else ""
+                    elif "Bâtiment" in props and props["Bâtiment"].get("rich_text"):
+                        structure = props["Bâtiment"]["rich_text"][0]["plain_text"] if props["Bâtiment"]["rich_text"] else ""
+                    elif "Building" in props and props["Building"].get("rich_text"):
+                        structure = props["Building"]["rich_text"][0]["plain_text"] if props["Building"]["rich_text"] else ""
+                    elif "Structure" in props and props["Structure"].get("select"):
+                        structure = props["Structure"]["select"]["name"] if props["Structure"]["select"] else ""
+                    elif "Bâtiment" in props and props["Bâtiment"].get("select"):
+                        structure = props["Bâtiment"]["select"]["name"] if props["Bâtiment"]["select"] else ""
+                    
                     rent = props.get("Loyer Mensuel", {}).get("number", 0) or props.get("Rent", {}).get("number", 0) or props.get("Rent Amount", {}).get("number", 0) or 0
                     due_day = props.get("Due Day", {}).get("number", 1) or 1
                     
@@ -523,6 +537,7 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                             "email": email,
                             "phone": phone,
                             "property_address": address,
+                            "structure": structure or "Non défini",
                             "rent_amount": rent,
                             "due_day": due_day,
                             "notion_id": page["id"]
@@ -1020,6 +1035,119 @@ async def get_monthly_payment_status(
         "paid_tenants": paid_tenants,
         "unpaid_tenants": unpaid_tenants
     }
+
+@api_router.get("/payments/stats-by-structure")
+async def get_payment_stats_by_structure(current_user: dict = Depends(get_current_user)):
+    """
+    Get current month payment statistics grouped by structure/building.
+    Returns progress bars data for each structure.
+    """
+    from calendar import monthrange
+    
+    now = datetime.now(timezone.utc)
+    month = now.month
+    year = now.year
+    
+    # Calculate date range: 28th of previous month to 28th of current month
+    if month == 1:
+        prev_month = 12
+        prev_year = year - 1
+    else:
+        prev_month = month - 1
+        prev_year = year
+    
+    start_date = datetime(prev_year, prev_month, 28, 0, 0, 0, tzinfo=timezone.utc)
+    last_day = min(28, monthrange(year, month)[1])
+    end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    
+    # Get all tenants
+    tenants = await db.tenants.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Get all payments in the date range
+    payments = await db.payments.find({
+        "user_id": current_user["id"],
+        "payment_date": {
+            "$gte": start_date.isoformat(),
+            "$lte": end_date.isoformat()
+        }
+    }, {"_id": 0}).to_list(10000)
+    
+    # Also check transactions
+    transactions = await db.transactions.find({
+        "user_id": current_user["id"],
+        "amount": {"$gt": 0},
+        "matched_tenant_id": {"$ne": None},
+        "transaction_date": {
+            "$gte": start_date.isoformat(),
+            "$lte": end_date.isoformat()
+        }
+    }, {"_id": 0}).to_list(10000)
+    
+    # Build set of tenants who paid
+    paid_tenant_ids = set()
+    for p in payments:
+        if p.get("tenant_id"):
+            paid_tenant_ids.add(p["tenant_id"])
+    for tx in transactions:
+        if tx.get("matched_tenant_id"):
+            paid_tenant_ids.add(tx["matched_tenant_id"])
+    
+    # Group by structure
+    structures = {}
+    unpaid_names = []
+    
+    for tenant in tenants:
+        structure = tenant.get("structure", "Non défini") or "Non défini"
+        
+        if structure not in structures:
+            structures[structure] = {
+                "name": structure,
+                "total": 0,
+                "paid": 0,
+                "unpaid": 0,
+                "expected_amount": 0,
+                "paid_amount": 0,
+                "unpaid_tenants": []
+            }
+        
+        structures[structure]["total"] += 1
+        structures[structure]["expected_amount"] += tenant.get("rent_amount", 0)
+        
+        if tenant["id"] in paid_tenant_ids:
+            structures[structure]["paid"] += 1
+            structures[structure]["paid_amount"] += tenant.get("rent_amount", 0)
+        else:
+            structures[structure]["unpaid"] += 1
+            structures[structure]["unpaid_tenants"].append({
+                "name": tenant["name"],
+                "rent_amount": tenant.get("rent_amount", 0)
+            })
+            unpaid_names.append(tenant["name"])
+    
+    # Calculate percentages
+    for struct in structures.values():
+        struct["percentage"] = round((struct["paid"] / struct["total"] * 100) if struct["total"] > 0 else 0, 1)
+    
+    # Overall stats
+    total_tenants = len(tenants)
+    total_paid = len(paid_tenant_ids)
+    total_unpaid = total_tenants - total_paid
+    overall_percentage = round((total_paid / total_tenants * 100) if total_tenants > 0 else 0, 1)
+    
+    return {
+        "overall": {
+            "total": total_tenants,
+            "paid": total_paid,
+            "unpaid": total_unpaid,
+            "percentage": overall_percentage,
+            "unpaid_names": unpaid_names
+        },
+        "by_structure": sorted(structures.values(), key=lambda x: x["name"])
+    }
+
 
 @api_router.get("/payments/available-months")
 async def get_available_months(current_user: dict = Depends(get_current_user)):
@@ -1767,6 +1895,67 @@ async def manual_sync_trigger(current_user: dict = Depends(get_current_user)):
     """Manually trigger sync and match process"""
     await scheduled_sync_and_match()
     return {"message": "Sync and match completed"}
+
+@api_router.post("/sync/manual")
+async def manual_sync(current_user: dict = Depends(get_current_user)):
+    """
+    Manually trigger full synchronization:
+    1. Sync tenants from Notion
+    2. Sync transactions from all connected banks
+    3. Run auto-matching algorithm
+    """
+    results = {
+        "notion_sync": {"success": False, "count": 0, "error": None},
+        "bank_sync": {"success": False, "count": 0, "error": None},
+        "matching": {"success": False, "count": 0, "error": None}
+    }
+    
+    # 1. Sync from Notion
+    try:
+        notion_result = await sync_from_notion(current_user)
+        results["notion_sync"]["success"] = True
+        results["notion_sync"]["count"] = notion_result.get("count", 0)
+    except Exception as e:
+        results["notion_sync"]["error"] = str(e)
+        logger.error(f"Notion sync error: {e}")
+    
+    # 2. Sync transactions from connected banks
+    try:
+        connected_banks = await db.connected_banks.find(
+            {"user_id": current_user["id"]},
+            {"_id": 0}
+        ).to_list(100)
+        
+        total_transactions = 0
+        for bank in connected_banks:
+            try:
+                # Fetch recent transactions (last 30 days)
+                from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+                tx_result = await sync_bank_transactions(bank["account_uid"], current_user, from_date=from_date)
+                total_transactions += tx_result.get("new_count", 0)
+            except Exception as e:
+                logger.error(f"Error syncing bank {bank.get('name')}: {e}")
+        
+        results["bank_sync"]["success"] = True
+        results["bank_sync"]["count"] = total_transactions
+    except Exception as e:
+        results["bank_sync"]["error"] = str(e)
+        logger.error(f"Bank sync error: {e}")
+    
+    # 3. Run auto-matching
+    try:
+        match_result = await auto_match_transactions(current_user)
+        results["matching"]["success"] = True
+        results["matching"]["count"] = match_result.get("matched_count", 0)
+    except Exception as e:
+        results["matching"]["error"] = str(e)
+        logger.error(f"Matching error: {e}")
+    
+    return {
+        "message": "Synchronisation manuelle terminée",
+        "results": results
+    }
+
 
 @api_router.get("/admin/scheduler-status")
 async def get_scheduler_status(current_user: dict = Depends(get_current_user)):
