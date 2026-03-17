@@ -114,7 +114,8 @@ class BankUpdate(BaseModel):
 
 class BankResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     name: str
     iban: Optional[str] = None
     balance: float
@@ -141,7 +142,8 @@ class TenantUpdate(BaseModel):
 
 class TenantResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -165,7 +167,8 @@ class TransactionCreate(BaseModel):
 
 class TransactionResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     bank_id: str
     amount: float
     description: str
@@ -187,7 +190,8 @@ class PaymentCreate(BaseModel):
 
 class PaymentResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: Optional[str] = None
+    organization_id: Optional[str] = None
     tenant_id: str
     amount: float
     payment_date: datetime
@@ -381,13 +385,18 @@ async def create_bank(bank_data: BankCreate, current_user: dict = Depends(get_cu
     bank_id = str(uuid.uuid4())
     bank_doc = {
         "id": bank_id,
-        **get_filter_for_user(current_user),
+        "user_id": current_user["id"],  # Keep track of who created it
         "name": bank_data.name,
         "iban": bank_data.iban,
         "balance": bank_data.balance,
         "color": bank_data.color,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
+    
+    # Add organization_id if user belongs to one
+    if current_user.get("organization_id"):
+        bank_doc["organization_id"] = current_user["organization_id"]
+    
     await db.banks.insert_one(bank_doc)
     return BankResponse(**{**bank_doc, "created_at": datetime.now(timezone.utc)})
 
