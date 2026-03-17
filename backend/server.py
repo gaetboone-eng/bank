@@ -268,7 +268,7 @@ def get_filter_for_user(current_user: dict) -> dict:
     """
     if current_user.get("organization_id"):
         return {"organization_id": current_user["organization_id"]}
-    return get_filter_for_user(current_user)
+    return {"user_id": current_user["id"]}
 
 def prepare_document_for_insert(current_user: dict, doc: dict) -> dict:
     """
@@ -1495,15 +1495,16 @@ async def connect_bank_account(
 @api_router.get("/banking/callback")
 async def banking_callback(code: str = Query(...), state: str = Query(...)):
     """Handle callback from bank authorization"""
+    frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "") if ENABLE_BANKING_REDIRECT_URL else ""
     try:
         # Verify state
         auth_state = await db.banking_auth_states.find_one({"state": state})
         if not auth_state:
-            raise HTTPException(status_code=400, detail="Invalid state")
+            return RedirectResponse(url=f"{frontend_url}/banks?error=session_invalide_veuillez_recommencer")
         
         user_id = auth_state.get("user_id")
         if not user_id:
-            raise HTTPException(status_code=400, detail="Invalid auth state: missing user_id")
+            return RedirectResponse(url=f"{frontend_url}/banks?error=session_expiree_veuillez_reconnectez_vous")
         
         organization_id = auth_state.get("organization_id")
         bank_name = auth_state["bank_name"]
@@ -1523,9 +1524,7 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
                 headers=headers
             ) as response:
                 if response.status != 200:
-                    error_text = await response.text()
-                    # Redirect to frontend with error
-                    frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "")
+                    await db.banking_auth_states.delete_one({"state": state})
                     return RedirectResponse(url=f"{frontend_url}/banks?error=authorization_failed")
                 
                 session_data = await response.json()
@@ -1558,13 +1557,10 @@ async def banking_callback(code: str = Query(...), state: str = Query(...)):
                 await db.banking_auth_states.delete_one({"state": state})
                 
                 # Redirect to frontend success
-                frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "")
                 return RedirectResponse(url=f"{frontend_url}/banks?connected=true&accounts={len(accounts)}")
     
-    except HTTPException:
-        raise
     except Exception as e:
-        frontend_url = ENABLE_BANKING_REDIRECT_URL.replace("/api/banking/callback", "") if ENABLE_BANKING_REDIRECT_URL else ""
+        logger.error(f"Banking callback error: {str(e)}")
         return RedirectResponse(url=f"{frontend_url}/banks?error={str(e)}")
 
 @api_router.get("/banking/connected")
@@ -1801,6 +1797,149 @@ async def scheduled_sync_and_match():
             for connected in connected_banks:
                 # Process connected bank
                 logger.info(f"Processing connected bank: {connected.get('bank_name')}")
+                account_uid = connected.get("account_uid")
+                if not account_uid:
+                    continue
+                
+                try:
+                    # Create Enable Banking JWT
+                    if not ENABLE_BANKING_APP_ID or not ENABLE_BANKING_PRIVATE_KEY:
+                        continue
+                    
+                    from cryptography.hazmat.primitives import serialization
+                    from cryptography.hazmat.backends import default_backend
+                    
+                    iat = int(datetime.now(timezone.utc).timestamp())
+                    jwt_body = {
+                        "iss": "enablebanking.com",
+                        "aud": "api.enablebanking.com",
+                        "iat": iat,
+                        "exp": iat + 3600,
+                    }
+                    
+                    if ENABLE_BANKING_PRIVATE_KEY.startswith("/") or ENABLE_BANKING_PRIVATE_KEY.endswith(".pem"):
+                        with open(ENABLE_BANKING_PRIVATE_KEY, 'rb') as f:
+                            key_data = f.read()
+                    else:
+                        key_data = ENABLE_BANKING_PRIVATE_KEY.encode('utf-8')
+                    
+                    private_key = serialization.load_pem_private_key(key_data, password=None, backend=default_backend())
+                    eb_jwt = pyjwt.encode(jwt_body, private_key, algorithm="RS256", headers={"kid": ENABLE_BANKING_APP_ID})
+                    
+                    headers = {"Authorization": f"Bearer {eb_jwt}"}
+                    
+                    # Fetch transactions from last 15 days
+                    date_from = (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%d")
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(
+                            f"https://api.enablebanking.com/accounts/{account_uid}/transactions?date_from={date_from}",
+                            headers=headers
+                        ) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                transactions = data.get("transactions", [])
+                                
+                                imported = 0
+                                for tx in transactions:
+                                    tx_ref = tx.get("entry_reference") or tx.get("transaction_id", "")
+                                    existing = await db.transactions.find_one({
+                                        "user_id": user_id,
+                                        "reference": tx_ref
+                                    })
+                                    if not existing and tx_ref:
+                                        amount_data = tx.get("transaction_amount", {})
+                                        amount = float(amount_data.get("amount", 0))
+                                        if tx.get("credit_debit_indicator") == "DBIT":
+                                            amount = -abs(amount)
+                                        else:
+                                            amount = abs(amount)
+                                        tx_date = tx.get("booking_date") or tx.get("value_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                                        tx_id = str(uuid.uuid4())
+                                        await db.transactions.insert_one({
+                                            "id": tx_id,
+                                            "user_id": user_id,
+                                            "bank_id": default_bank_id,
+                                            "amount": amount,
+                                            "description": tx.get("remittance_information", ["Imported"])[0] if tx.get("remittance_information") else "Imported",
+                                            "transaction_date": f"{tx_date}T00:00:00Z",
+                                            "category": "rent" if amount > 0 else "expense",
+                                            "reference": tx_ref,
+                                            "matched_tenant_id": None,
+                                            "created_at": datetime.now(timezone.utc).isoformat(),
+                                            "source": "scheduled_sync"
+                                        })
+                                        imported += 1
+                                logger.info(f"  Imported {imported} new transactions for {connected.get('bank_name')}")
+                
+                except Exception as e:
+                    logger.error(f"  Error syncing {connected.get('bank_name')}: {str(e)}")
+            
+            # Now auto-match for this user
+            tenants = await db.tenants.find({"user_id": user_id}).to_list(1000)
+            unmatched_txs = await db.transactions.find({
+                "user_id": user_id,
+                "amount": {"$gt": 0},
+                "matched_tenant_id": None
+            }).to_list(1000)
+            
+            current_month = datetime.now(timezone.utc).strftime("%B")
+            current_year = datetime.now(timezone.utc).year
+            matched_count = 0
+            
+            for tx in unmatched_txs:
+                desc = tx.get('description', '')
+                amount = tx['amount']
+                best_match = None
+                best_score = 0
+                for tenant in tenants:
+                    rent = tenant.get('rent_amount', 0)
+                    if rent > 0:
+                        amount_diff = abs(amount - rent) / rent
+                        if amount_diff < 0.15:
+                            score = calculate_match_score(tenant['name'], desc)
+                            if amount_diff < 0.01:
+                                score += 5
+                            if score > best_score and score >= 10:
+                                best_score = score
+                                best_match = tenant
+                if best_match:
+                    await db.transactions.update_one(
+                        {"id": tx['id']},
+                        {"$set": {"matched_tenant_id": best_match['id']}}
+                    )
+                    existing = await db.payments.find_one({
+                        "tenant_id": best_match['id'],
+                        "month": current_month,
+                        "year": current_year
+                    })
+                    if not existing:
+                        payment_id = str(uuid.uuid4())
+                        tx_date = tx.get('transaction_date', datetime.now(timezone.utc).isoformat())
+                        await db.payments.insert_one({
+                            "id": payment_id,
+                            "user_id": user_id,
+                            "tenant_id": best_match['id'],
+                            "amount": amount,
+                            "payment_date": tx_date,
+                            "bank_id": tx['bank_id'],
+                            "transaction_id": tx['id'],
+                            "month": current_month,
+                            "year": current_year,
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        await db.tenants.update_one(
+                            {"id": best_match['id']},
+                            {"$set": {"payment_status": "paid", "last_payment_date": tx_date}}
+                        )
+                        matched_count += 1
+            
+            logger.info(f"  Auto-matched {matched_count} payments for {user.get('email')}")
+        
+        logger.info("✅ Scheduled sync and match completed")
+    
+    except Exception as e:
+        logger.error(f"❌ Scheduled task error: {str(e)}")
 
 @api_router.post("/banking/import-all")
 async def import_all_enable_banking_accounts(current_user: dict = Depends(get_current_user)):
@@ -1913,164 +2052,6 @@ async def import_all_enable_banking_accounts(current_user: dict = Depends(get_cu
         logger.error(f"Error in import_all_enable_banking_accounts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
-                account_uid = connected.get("account_uid")
-                if not account_uid:
-                    continue
-                
-                try:
-                    # Create Enable Banking JWT
-                    if not ENABLE_BANKING_APP_ID or not ENABLE_BANKING_PRIVATE_KEY:
-                        continue
-                    
-                    from cryptography.hazmat.primitives import serialization
-                    from cryptography.hazmat.backends import default_backend
-                    
-                    iat = int(datetime.now(timezone.utc).timestamp())
-                    jwt_body = {
-                        "iss": "enablebanking.com",
-                        "aud": "api.enablebanking.com",
-                        "iat": iat,
-                        "exp": iat + 3600,
-                    }
-                    
-                    if ENABLE_BANKING_PRIVATE_KEY.startswith("/") or ENABLE_BANKING_PRIVATE_KEY.endswith(".pem"):
-                        with open(ENABLE_BANKING_PRIVATE_KEY, 'rb') as f:
-                            key_data = f.read()
-                    else:
-                        key_data = ENABLE_BANKING_PRIVATE_KEY.encode('utf-8')
-                    
-                    private_key = serialization.load_pem_private_key(key_data, password=None, backend=default_backend())
-                    eb_jwt = pyjwt.encode(jwt_body, private_key, algorithm="RS256", headers={"kid": ENABLE_BANKING_APP_ID})
-                    
-                    headers = {"Authorization": f"Bearer {eb_jwt}"}
-                    
-                    # Fetch transactions from last 15 days
-                    date_from = (datetime.now(timezone.utc) - timedelta(days=15)).strftime("%Y-%m-%d")
-                    
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            f"https://api.enablebanking.com/accounts/{account_uid}/transactions?date_from={date_from}",
-                            headers=headers
-                        ) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                transactions = data.get("transactions", [])
-                                
-                                imported = 0
-                                for tx in transactions:
-                                    tx_ref = tx.get("entry_reference") or tx.get("transaction_id", "")
-                                    
-                                    # Check if already exists
-                                    existing = await db.transactions.find_one({
-                                        "user_id": user_id,
-                                        "reference": tx_ref
-                                    })
-                                    
-                                    if not existing and tx_ref:
-                                        amount_data = tx.get("transaction_amount", {})
-                                        amount = float(amount_data.get("amount", 0))
-                                        
-                                        if tx.get("credit_debit_indicator") == "DBIT":
-                                            amount = -abs(amount)
-                                        else:
-                                            amount = abs(amount)
-                                        
-                                        tx_date = tx.get("booking_date") or tx.get("value_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                                        
-                                        tx_id = str(uuid.uuid4())
-                                        await db.transactions.insert_one({
-                                            "id": tx_id,
-                                            "user_id": user_id,
-                                            "bank_id": default_bank_id,
-                                            "amount": amount,
-                                            "description": tx.get("remittance_information", ["Imported"])[0] if tx.get("remittance_information") else "Imported",
-                                            "transaction_date": f"{tx_date}T00:00:00Z",
-                                            "category": "rent" if amount > 0 else "expense",
-                                            "reference": tx_ref,
-                                            "matched_tenant_id": None,
-                                            "created_at": datetime.now(timezone.utc).isoformat(),
-                                            "source": "scheduled_sync"
-                                        })
-                                        imported += 1
-                                
-                                logger.info(f"  Imported {imported} new transactions for {connected.get('bank_name')}")
-                
-                except Exception as e:
-                    logger.error(f"  Error syncing {connected.get('bank_name')}: {str(e)}")
-            
-            # Now auto-match for this user
-            tenants = await db.tenants.find({"user_id": user_id}).to_list(1000)
-            unmatched_txs = await db.transactions.find({
-                "user_id": user_id,
-                "amount": {"$gt": 0},
-                "matched_tenant_id": None
-            }).to_list(1000)
-            
-            current_month = datetime.now(timezone.utc).strftime("%B")
-            current_year = datetime.now(timezone.utc).year
-            matched_count = 0
-            
-            for tx in unmatched_txs:
-                desc = tx.get('description', '')
-                amount = tx['amount']
-                
-                best_match = None
-                best_score = 0
-                
-                for tenant in tenants:
-                    rent = tenant.get('rent_amount', 0)
-                    if rent > 0:
-                        amount_diff = abs(amount - rent) / rent
-                        if amount_diff < 0.15:
-                            score = calculate_match_score(tenant['name'], desc)
-                            if amount_diff < 0.01:
-                                score += 5
-                            if score > best_score and score >= 10:
-                                best_score = score
-                                best_match = tenant
-                
-                if best_match:
-                    await db.transactions.update_one(
-                        {"id": tx['id']},
-                        {"$set": {"matched_tenant_id": best_match['id']}}
-                    )
-                    
-                    existing = await db.payments.find_one({
-                        "tenant_id": best_match['id'],
-                        "month": current_month,
-                        "year": current_year
-                    })
-                    
-                    if not existing:
-                        payment_id = str(uuid.uuid4())
-                        tx_date = tx.get('transaction_date', datetime.now(timezone.utc).isoformat())
-                        
-                        await db.payments.insert_one({
-                            "id": payment_id,
-                            "user_id": user_id,
-                            "tenant_id": best_match['id'],
-                            "amount": amount,
-                            "payment_date": tx_date,
-                            "bank_id": tx['bank_id'],
-                            "transaction_id": tx['id'],
-                            "month": current_month,
-                            "year": current_year,
-                            "created_at": datetime.now(timezone.utc).isoformat()
-                        })
-                        
-                        await db.tenants.update_one(
-                            {"id": best_match['id']},
-                            {"$set": {"payment_status": "paid", "last_payment_date": tx_date}}
-                        )
-                        matched_count += 1
-            
-            logger.info(f"  Auto-matched {matched_count} payments for {user.get('email')}")
-        
-        logger.info("✅ Scheduled sync and match completed")
-    
-    except Exception as e:
-        logger.error(f"❌ Scheduled task error: {str(e)}")
-
 # Schedule the task to run on the 1st, 10th, and 20th of each month at 8:00 AM
 scheduler.add_job(
     scheduled_sync_and_match,
@@ -2147,6 +2128,11 @@ async def manual_sync(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         results["matching"]["error"] = str(e)
         logger.error(f"Matching error: {e}")
+
+    return {
+        "message": "Synchronisation manuelle terminée",
+        "results": results
+    }
 
 
 # ==================== ORGANIZATION MIGRATION ====================
@@ -2243,12 +2229,6 @@ async def migrate_to_organization(current_user: dict = Depends(get_current_user)
     except Exception as e:
         logger.error(f"Migration error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
-
-    
-    return {
-        "message": "Synchronisation manuelle terminée",
-        "results": results
-    }
 
 
 @api_router.get("/admin/scheduler-status")
