@@ -1979,67 +1979,63 @@ async def import_all_enable_banking_accounts(current_user: dict = Depends(get_cu
             bank_name = connected.get("bank_name", "Unknown Bank")
             session_id = connected.get("session_id")
             
-            # Check if bank already exists with this IBAN
-            existing_bank = await db.banks.find_one({
-                **filter_query,
-                "iban": account_iban
-            }, {"_id": 0})
+            # Normalize IBAN (remove spaces) for comparison
+            normalized_iban = account_iban.replace(" ", "")
+            
+            # Check if bank already exists with this IBAN (normalize both sides)
+            all_local_banks = await db.banks.find(filter_query, {"_id": 0}).to_list(100)
+            existing_bank = next(
+                (b for b in all_local_banks if b.get("iban", "").replace(" ", "") == normalized_iban),
+                None
+            )
             
             if existing_bank:
                 existing_count += 1
                 continue
             
-            # Fetch account details from Enable Banking to get current balance
+            # Fetch balance from Enable Banking using /balances endpoint
+            balance = 0.0
             try:
                 async with aiohttp.ClientSession() as session:
-                    # Get account info
                     async with session.get(
-                        f"https://api.enablebanking.com/accounts/{account_uid}",
+                        f"https://api.enablebanking.com/accounts/{account_uid}/balances",
                         headers=headers
                     ) as response:
                         if response.status == 200:
-                            account_data = await response.json()
-                            
-                            # Extract balance
-                            balance = 0.0
-                            balances = account_data.get("balances", [])
-                            if balances:
-                                # Try to get the closingBooked balance first, then available
-                                for bal in balances:
-                                    if bal.get("balanceType") == "closingBooked":
-                                        balance = float(bal.get("balanceAmount", {}).get("amount", 0))
-                                        break
-                                    elif bal.get("balanceType") == "expected":
-                                        balance = float(bal.get("balanceAmount", {}).get("amount", 0))
-                            
-                            # Create bank entry
-                            bank_id = str(uuid.uuid4())
-                            bank_doc = {
-                                "id": bank_id,
-                                "user_id": current_user["id"],
-                                "name": f"{bank_name} {account_iban[-4:] if account_iban else ''}",
-                                "iban": account_iban,
-                                "balance": balance,
-                                "color": "#10B981",  # Green for imported banks
-                                "created_at": datetime.now(timezone.utc).isoformat(),
-                                "enable_banking_account_uid": account_uid,
-                                "enable_banking_session_id": session_id
-                            }
-                            
-                            # Add organization_id if user belongs to one
-                            if current_user.get("organization_id"):
-                                bank_doc["organization_id"] = current_user["organization_id"]
-                            
-                            await db.banks.insert_one(bank_doc)
-                            banks_created.append(bank_doc)
-                            imported_count += 1
-                            
-                            logger.info(f"Imported bank: {bank_name} - {account_iban}")
-                        else:
-                            logger.error(f"Failed to fetch account {account_uid}: {response.status}")
+                            bal_data = await response.json()
+                            balances = bal_data.get("balances", [])
+                            for bal in balances:
+                                bal_type = bal.get("balance_type") or bal.get("balanceType", "")
+                                if bal_type in ["closingBooked", "XPCD", "interimAvailable", "closingAvailable"]:
+                                    amt = bal.get("balance_amount") or bal.get("balanceAmount") or {}
+                                    balance = float(amt.get("amount", 0))
+                                    break
             except Exception as e:
-                logger.error(f"Error importing account {account_uid}: {str(e)}")
-                continue
+                logger.warning(f"Could not fetch balance for {account_uid}: {str(e)}")
+            
+            # Create bank entry with distinguishable name (IBAN last 4 chars)
+            iban_suffix = normalized_iban[-4:] if normalized_iban else ""
+            bank_id = str(uuid.uuid4())
+            bank_doc = {
+                "id": bank_id,
+                "user_id": current_user["id"],
+                "name": f"{bank_name} ...{iban_suffix}",
+                "iban": account_iban,
+                "balance": balance,
+                "color": "#10B981",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "enable_banking_account_uid": account_uid,
+                "enable_banking_session_id": session_id
+            }
+            
+            if current_user.get("organization_id"):
+                bank_doc["organization_id"] = current_user["organization_id"]
+            
+            await db.banks.insert_one(bank_doc)
+            bank_doc_clean = {k: v for k, v in bank_doc.items() if k != "_id"}
+            banks_created.append(bank_doc_clean)
+            imported_count += 1
+            logger.info(f"Imported bank: {bank_name} ...{iban_suffix} (balance: {balance})")
         
         return {
             "message": f"Import completed: {imported_count} new bank(s), {existing_count} already exist",
@@ -2100,17 +2096,27 @@ async def manual_sync(current_user: dict = Depends(get_current_user)):
         total_transactions = 0
         for bank in connected_banks:
             try:
-                # Fetch recent transactions - sync_bank_transactions fetches last 30 days by default
-                # We need a bank_id - find the corresponding manual bank
-                bank_doc = await db.banks.find_one({
-                    **get_filter_for_user(current_user),
-                    "iban": bank["account_iban"]
-                }, {"_id": 0})
+                # Find local bank by normalized IBAN (ignore spaces)
+                connected_iban = bank.get("account_iban", "").replace(" ", "")
+                all_local_banks = await db.banks.find(
+                    get_filter_for_user(current_user), {"_id": 0}
+                ).to_list(100)
+                bank_doc = next(
+                    (b for b in all_local_banks if b.get("iban", "").replace(" ", "") == connected_iban),
+                    None
+                )
+                
+                # If no local bank found, use the first available bank as fallback
+                if not bank_doc and all_local_banks:
+                    bank_doc = all_local_banks[0]
+                    logger.warning(f"No matching local bank for IBAN {connected_iban}, using '{bank_doc.get('name')}' as fallback")
                 
                 bank_id = bank_doc["id"] if bank_doc else None
                 if bank_id:
                     tx_result = await sync_bank_transactions(bank["account_uid"], bank_id, current_user)
                     total_transactions += tx_result.get("new_count", 0)
+                else:
+                    logger.warning(f"No local bank found for connected account {bank.get('bank_name')} - skipping")
             except Exception as e:
                 logger.error(f"Error syncing bank {bank.get('bank_name')}: {e}")
         
