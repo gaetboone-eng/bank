@@ -1793,7 +1793,7 @@ async def scheduled_sync_and_match():
             
             if not local_banks:
                 logger.info(f"No local banks found for user {user_id}")
-                return
+                continue
             
             # Use first local bank as default target
             default_bank_id = local_banks[0]["id"]
@@ -1801,8 +1801,6 @@ async def scheduled_sync_and_match():
             for connected in connected_banks:
                 # Process connected bank
                 logger.info(f"Processing connected bank: {connected.get('bank_name')}")
-        except Exception as e:
-            logger.error(f"Scheduler error: {str(e)}")
 
 @api_router.post("/banking/import-all")
 async def import_all_enable_banking_accounts(current_user: dict = Depends(get_current_user)):
