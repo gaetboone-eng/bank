@@ -381,7 +381,7 @@ async def create_bank(bank_data: BankCreate, current_user: dict = Depends(get_cu
     bank_id = str(uuid.uuid4())
     bank_doc = {
         "id": bank_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "name": bank_data.name,
         "iban": bank_data.iban,
         "balance": bank_data.balance,
@@ -408,7 +408,7 @@ async def update_bank(bank_id: str, bank_data: BankUpdate, current_user: dict = 
         raise HTTPException(status_code=400, detail="No data to update")
     
     result = await db.banks.find_one_and_update(
-        {"id": bank_id, "user_id": current_user["id"], **get_filter_for_user(current_user)},
+        {"id": bank_id, **get_filter_for_user(current_user)},
         {"$set": update_data},
         return_document=True
     )
@@ -422,7 +422,7 @@ async def update_bank(bank_id: str, bank_data: BankUpdate, current_user: dict = 
 
 @api_router.delete("/banks/{bank_id}")
 async def delete_bank(bank_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.banks.delete_one({"id": bank_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    result = await db.banks.delete_one({"id": bank_id, **get_filter_for_user(current_user)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Bank not found")
     return {"message": "Bank deleted"}
@@ -434,7 +434,7 @@ async def create_tenant(tenant_data: TenantCreate, current_user: dict = Depends(
     tenant_id = str(uuid.uuid4())
     tenant_doc = {
         "id": tenant_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "name": tenant_data.name,
         "email": tenant_data.email,
         "phone": tenant_data.phone,
@@ -478,7 +478,7 @@ async def get_tenants(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/tenants/{tenant_id}", response_model=TenantResponse)
 async def get_tenant(tenant_id: str, current_user: dict = Depends(get_current_user)):
-    tenant = await db.tenants.find_one({"id": tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": tenant_id, **get_filter_for_user(current_user)}, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -496,7 +496,7 @@ async def update_tenant(tenant_id: str, tenant_data: TenantUpdate, current_user:
         raise HTTPException(status_code=400, detail="No data to update")
     
     result = await db.tenants.find_one_and_update(
-        {"id": tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)},
+        {"id": tenant_id, **get_filter_for_user(current_user)},
         {"$set": update_data},
         return_document=True
     )
@@ -512,7 +512,7 @@ async def update_tenant(tenant_id: str, tenant_data: TenantUpdate, current_user:
 
 @api_router.delete("/tenants/{tenant_id}")
 async def delete_tenant(tenant_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.tenants.delete_one({"id": tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    result = await db.tenants.delete_one({"id": tenant_id, **get_filter_for_user(current_user)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return {"message": "Tenant deleted"}
@@ -578,7 +578,7 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                     
                     if name:
                         existing = await db.tenants.find_one({
-                            "user_id": current_user["id"], **get_filter_for_user(current_user),
+                            **get_filter_for_user(current_user),
                             "notion_id": page["id"]
                         })
                         
@@ -602,7 +602,7 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                             tenant_id = str(uuid.uuid4())
                             await db.tenants.insert_one({
                                 "id": tenant_id,
-                                "user_id": current_user["id"], **get_filter_for_user(current_user),
+                                **get_filter_for_user(current_user),
                                 **tenant_data,
                                 "created_at": datetime.now(timezone.utc).isoformat(),
                                 "payment_status": "pending",
@@ -620,14 +620,14 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
 @api_router.post("/transactions", response_model=TransactionResponse)
 async def create_transaction(tx_data: TransactionCreate, current_user: dict = Depends(get_current_user)):
     # Verify bank belongs to user
-    bank = await db.banks.find_one({"id": tx_data.bank_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    bank = await db.banks.find_one({"id": tx_data.bank_id, **get_filter_for_user(current_user)})
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
     
     tx_id = str(uuid.uuid4())
     tx_doc = {
         "id": tx_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "bank_id": tx_data.bank_id,
         "amount": tx_data.amount,
         "description": tx_data.description,
@@ -669,11 +669,11 @@ async def get_transactions(bank_id: Optional[str] = None, current_user: dict = D
 
 @api_router.post("/transactions/{tx_id}/match/{tenant_id}")
 async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: dict = Depends(get_current_user)):
-    tx = await db.transactions.find_one({"id": tx_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    tx = await db.transactions.find_one({"id": tx_id, **get_filter_for_user(current_user)})
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    tenant = await db.tenants.find_one({"id": tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    tenant = await db.tenants.find_one({"id": tenant_id, **get_filter_for_user(current_user)})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -690,7 +690,7 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
     
     # Check if rule already exists
     existing_rule = await db.matching_rules.find_one({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "tenant_id": tenant_id,
         "pattern": keyword_pattern
     })
@@ -699,7 +699,7 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
         # Save new matching rule
         await db.matching_rules.insert_one({
             "id": str(uuid.uuid4()),
-            "user_id": current_user["id"], **get_filter_for_user(current_user),
+            **get_filter_for_user(current_user),
             "tenant_id": tenant_id,
             "tenant_name": tenant["name"],
             "pattern": keyword_pattern,
@@ -721,7 +721,7 @@ async def match_transaction_to_tenant(tx_id: str, tenant_id: str, current_user: 
     payment_id = str(uuid.uuid4())
     payment_doc = {
         "id": payment_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "tenant_id": tenant_id,
         "amount": tx["amount"],
         "payment_date": tx["transaction_date"],
@@ -837,7 +837,7 @@ async def auto_match_transactions(current_user: dict = Depends(get_current_user)
     
     # Get unmatched positive transactions (incoming payments)
     transactions = await db.transactions.find({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "amount": {"$gt": 0},
         "matched_tenant_id": None
     }, {"_id": 0}).to_list(1000)
@@ -901,7 +901,7 @@ async def auto_match_transactions(current_user: dict = Depends(get_current_user)
                 
                 await db.payments.insert_one({
                     "id": payment_id,
-                    "user_id": current_user["id"], **get_filter_for_user(current_user),
+                    **get_filter_for_user(current_user),
                     "tenant_id": best_match['id'],
                     "amount": amount,
                     "payment_date": tx_date,
@@ -951,7 +951,7 @@ async def delete_matching_rule(rule_id: str, current_user: dict = Depends(get_cu
     """Delete a matching rule"""
     result = await db.matching_rules.delete_one({
         "id": rule_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user)
+        **get_filter_for_user(current_user)
     })
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -994,7 +994,7 @@ async def get_monthly_payment_status(
     
     # Get all payments in the date range
     payments = await db.payments.find({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "payment_date": {
             "$gte": start_date.isoformat(),
             "$lte": end_date.isoformat()
@@ -1003,7 +1003,7 @@ async def get_monthly_payment_status(
     
     # Also check transactions directly (for payments not yet in payments collection)
     transactions = await db.transactions.find({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "amount": {"$gt": 0},
         "matched_tenant_id": {"$ne": None},
         "transaction_date": {
@@ -1118,7 +1118,7 @@ async def get_payment_stats_by_structure(current_user: dict = Depends(get_curren
     
     # Get all payments in the date range
     payments = await db.payments.find({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "payment_date": {
             "$gte": start_date.isoformat(),
             "$lte": end_date.isoformat()
@@ -1127,7 +1127,7 @@ async def get_payment_stats_by_structure(current_user: dict = Depends(get_curren
     
     # Also check transactions
     transactions = await db.transactions.find({
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "amount": {"$gt": 0},
         "matched_tenant_id": {"$ne": None},
         "transaction_date": {
@@ -1242,14 +1242,14 @@ async def get_available_months(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/payments", response_model=PaymentResponse)
 async def create_payment(payment_data: PaymentCreate, current_user: dict = Depends(get_current_user)):
-    tenant = await db.tenants.find_one({"id": payment_data.tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    tenant = await db.tenants.find_one({"id": payment_data.tenant_id, **get_filter_for_user(current_user)})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     payment_id = str(uuid.uuid4())
     payment_doc = {
         "id": payment_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user),
+        **get_filter_for_user(current_user),
         "tenant_id": payment_data.tenant_id,
         "amount": payment_data.amount,
         "payment_date": payment_data.payment_date.isoformat(),
@@ -1294,7 +1294,7 @@ async def send_whatsapp_notification(notification: NotificationRequest, current_
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         raise HTTPException(status_code=400, detail="Twilio not configured. Please add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM to settings.")
     
-    tenant = await db.tenants.find_one({"id": notification.tenant_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    tenant = await db.tenants.find_one({"id": notification.tenant_id, **get_filter_for_user(current_user)})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -1314,7 +1314,7 @@ async def send_whatsapp_notification(notification: NotificationRequest, current_
         # Log notification
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()),
-            "user_id": current_user["id"], **get_filter_for_user(current_user),
+            **get_filter_for_user(current_user),
             "tenant_id": notification.tenant_id,
             "message": notification.message,
             "status": message.status,
@@ -1370,7 +1370,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
     settings = await db.user_settings.find_one(get_filter_for_user(current_user), {"_id": 0})
     if not settings:
         settings = {
-            "user_id": current_user["id"], **get_filter_for_user(current_user),
+            **get_filter_for_user(current_user),
             "notion_api_key": "",
             "notion_database_id": "",
             "twilio_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN),
@@ -1441,7 +1441,7 @@ async def connect_bank_account(
         # Store state in database to verify callback
         await db.banking_auth_states.insert_one({
             "state": state,
-            "user_id": current_user["id"], **get_filter_for_user(current_user),
+            **get_filter_for_user(current_user),
             "bank_name": bank_name,
             "bank_country": bank_country,
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -1557,7 +1557,7 @@ async def get_account_balances(account_uid: str, current_user: dict = Depends(ge
     # Verify account belongs to user
     connected = await db.connected_banks.find_one({
         "account_uid": account_uid,
-        "user_id": current_user["id"], **get_filter_for_user(current_user)
+        **get_filter_for_user(current_user)
     })
     if not connected:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -1592,7 +1592,7 @@ async def get_account_transactions(
     # Verify account belongs to user
     connected = await db.connected_banks.find_one({
         "account_uid": account_uid,
-        "user_id": current_user["id"], **get_filter_for_user(current_user)
+        **get_filter_for_user(current_user)
     })
     if not connected:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -1627,13 +1627,13 @@ async def sync_bank_transactions(account_uid: str, bank_id: str, current_user: d
     # Verify connected account belongs to user
     connected = await db.connected_banks.find_one({
         "account_uid": account_uid,
-        "user_id": current_user["id"], **get_filter_for_user(current_user)
+        **get_filter_for_user(current_user)
     })
     if not connected:
         raise HTTPException(status_code=404, detail="Connected account not found")
     
     # Verify local bank belongs to user
-    bank = await db.banks.find_one({"id": bank_id, "user_id": current_user["id"], **get_filter_for_user(current_user)})
+    bank = await db.banks.find_one({"id": bank_id, **get_filter_for_user(current_user)})
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
     
@@ -1661,7 +1661,7 @@ async def sync_bank_transactions(account_uid: str, bank_id: str, current_user: d
                     # Check if transaction already exists (by reference)
                     tx_ref = tx.get("entry_reference") or tx.get("transaction_id", "")
                     existing = await db.transactions.find_one({
-                        "user_id": current_user["id"], **get_filter_for_user(current_user),
+                        **get_filter_for_user(current_user),
                         "reference": tx_ref
                     })
                     
@@ -1683,7 +1683,7 @@ async def sync_bank_transactions(account_uid: str, bank_id: str, current_user: d
                         tx_id = str(uuid.uuid4())
                         tx_doc = {
                             "id": tx_id,
-                            "user_id": current_user["id"], **get_filter_for_user(current_user),
+                            **get_filter_for_user(current_user),
                             "bank_id": bank_id,
                             "amount": amount,
                             "description": tx.get("remittance_information", ["Imported transaction"])[0] if tx.get("remittance_information") else "Imported transaction",
@@ -1728,7 +1728,7 @@ async def disconnect_bank(connected_id: str, current_user: dict = Depends(get_cu
     """Disconnect a bank account"""
     result = await db.connected_banks.delete_one({
         "id": connected_id,
-        "user_id": current_user["id"], **get_filter_for_user(current_user)
+        **get_filter_for_user(current_user)
     })
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Connected bank not found")
