@@ -9,6 +9,7 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle2,
+  AlertCircle,
   ArrowRight,
   RefreshCw,
   Sparkles,
