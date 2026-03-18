@@ -3,29 +3,27 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  Users, 
-  Building2, 
-  TrendingUp, 
+import {
+  Users,
+  Building2,
+  TrendingUp,
   TrendingDown,
   CheckCircle2,
-  AlertCircle,
   ArrowRight,
   RefreshCw,
   Sparkles,
   Loader2
 } from "lucide-react";
-import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync } from "@/lib/api";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync, getCashflowHistory } from "@/lib/api";
 import { toast } from "sonner";
-import HistoricalProgressChart from "@/components/HistoricalProgressChart";
+import CashflowChart from "@/components/CashflowChart";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [banks, setBanks] = useState([]);
   const [structureStats, setStructureStats] = useState(null);
-  const [monthlyHistory, setMonthlyHistory] = useState([]);
+  const [cashflow, setCashflow] = useState({ history: [], structures: [], late_tenants: [] });
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -33,20 +31,18 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, tenantsRes, banksRes, structureRes, historyRes] = await Promise.all([
+      const [statsRes, tenantsRes, banksRes, structureRes, cashflowRes] = await Promise.all([
         getDashboardStats(),
         getTenants(),
         getBanks(),
         getPaymentStatsByStructure(),
-        fetch(`${process.env.REACT_APP_BACKEND_URL}/api/dashboard/monthly-history`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        }).then(r => r.json())
+        getCashflowHistory()
       ]);
       setStats(statsRes.data);
       setTenants(tenantsRes.data);
       setBanks(banksRes.data);
       setStructureStats(structureRes.data);
-      setMonthlyHistory(historyRes.history || []);
+      setCashflow(cashflowRes.data);
     } catch (error) {
       toast.error("Erreur lors du chargement des données");
     } finally {
@@ -364,10 +360,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Historical Progress Chart */}
-      {monthlyHistory.length > 0 && (
-        <HistoricalProgressChart data={monthlyHistory} />
-      )}
+      {/* Cashflow Chart + Late Tenants */}
+      <CashflowChart
+        history={cashflow.history}
+        structures={cashflow.structures}
+        lateTenants={cashflow.late_tenants}
+      />
 
       {/* Financial Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -484,48 +482,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Unpaid Tenants Alert */}
-      {unpaidTenants.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50" data-testid="unpaid-tenants-alert">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-orange-600" />
-              <CardTitle className="text-orange-800" style={{ fontFamily: "Manrope" }}>
-                Loyers en attente ({unpaidTenants.length})
-              </CardTitle>
-            </div>
-            <Link to="/tenants">
-              <Button variant="outline" size="sm" className="border-orange-300 text-orange-700 hover:bg-orange-100" data-testid="view-unpaid-tenants-btn">
-                Voir les détails <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {unpaidTenants.slice(0, 6).map((tenant) => (
-                <Link 
-                  key={tenant.id} 
-                  to={`/tenants/${tenant.id}`}
-                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-orange-200 hover:border-orange-300 transition-colors"
-                  data-testid={`unpaid-tenant-${tenant.id}`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                    <span className="text-orange-700 font-semibold">
-                      {tenant.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 truncate">{tenant.name}</p>
-                    <p className="text-sm text-orange-600 font-medium">
-                      {formatCurrency(tenant.rent_amount)}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recent Paid */}
       {paidTenants.length > 0 && (

@@ -61,9 +61,9 @@ export default function Layout() {
               </div>
               <div>
                 <h1 className="font-bold text-slate-900 tracking-tight" style={{ fontFamily: "Manrope" }}>
-                  Tenant Ledger
+                  CGR Bank
                 </h1>
-                <p className="text-xs text-slate-500">Assistant bancaire</p>
+                <p className="text-xs text-slate-500">Gestion de SCIs</p>
               </div>
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function Layout() {
             <Menu className="w-5 h-5" />
           </Button>
           <h1 className="font-bold text-slate-900" style={{ fontFamily: "Manrope" }}>
-            Tenant Ledger
+            CGR Bank
           </h1>
         </header>
 

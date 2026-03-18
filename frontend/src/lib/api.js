@@ -30,6 +30,7 @@ export const createPayment = (data) => axios.post(`${API}/payments`, data);
 
 // Dashboard
 export const getDashboardStats = () => axios.get(`${API}/dashboard/stats`);
+export const getCashflowHistory = () => axios.get(`${API}/dashboard/cashflow-history`);
 
 // Notifications
 export const sendWhatsAppNotification = (tenantId, message) => 

@@ -87,6 +87,101 @@ async def get_monthly_history(current_user: dict = Depends(get_current_user)):
     return {"history": history}
 
 
+@router.get("/dashboard/cashflow-history")
+async def get_cashflow_history(current_user: dict = Depends(get_current_user)):
+    from dateutil.relativedelta import relativedelta
+
+    month_names_fr = {1: "Jan", 2: "Fév", 3: "Mar", 4: "Avr", 5: "Mai", 6: "Jun",
+                      7: "Jul", 8: "Aoû", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Déc"}
+    month_names_en = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May",
+                      6: "June", 7: "July", 8: "August", 9: "September", 10: "October",
+                      11: "November", 12: "December"}
+
+    tenants = await db.tenants.find(
+        {**get_filter_for_user(current_user), "status": ACTIVE_STATUS_FILTER},
+        {"_id": 0}
+    ).to_list(1000)
+
+    tenant_map = {t["id"]: t for t in tenants}
+    structures = sorted(list(set(t.get("structure", "Non défini") or "Non défini" for t in tenants)))
+
+    now = datetime.now(timezone.utc)
+    history = []
+
+    for i in range(5, -1, -1):
+        target = now - relativedelta(months=i)
+        m, y = target.month, target.year
+        month_en = month_names_en[m]
+
+        payments = await db.payments.find({
+            **get_filter_for_user(current_user),
+            "month": month_en,
+            "year": y
+        }, {"_id": 0}).to_list(1000)
+
+        structure_amounts = {s: 0.0 for s in structures}
+        total = 0.0
+
+        for payment in payments:
+            tenant = tenant_map.get(payment["tenant_id"])
+            if tenant:
+                struct = tenant.get("structure", "Non défini") or "Non défini"
+                amount = payment.get("amount", 0)
+                structure_amounts[struct] = structure_amounts.get(struct, 0) + amount
+                total += amount
+
+        entry = {
+            "label": f"{month_names_fr[m]} {str(y)[2:]}",
+            "month": month_en,
+            "year": y,
+            "total": round(total, 2),
+        }
+        for struct in structures:
+            entry[struct] = round(structure_amounts.get(struct, 0.0), 2)
+
+        history.append(entry)
+
+    # Late tenants: missing current month, with count of consecutive missed months
+    current_month_en = month_names_en[now.month]
+    paid_this_month = await db.payments.distinct(
+        "tenant_id",
+        {**get_filter_for_user(current_user), "month": current_month_en, "year": now.year}
+    )
+    paid_set = set(paid_this_month)
+
+    late_tenants = []
+    for tenant in tenants:
+        if tenant["id"] not in paid_set:
+            months_late = 0
+            for j in range(1, 7):
+                check = now - relativedelta(months=j)
+                check_month_en = month_names_en[check.month]
+                payment = await db.payments.find_one({
+                    "tenant_id": tenant["id"],
+                    "month": check_month_en,
+                    "year": check.year
+                })
+                if payment:
+                    break
+                months_late += 1
+
+            late_tenants.append({
+                "id": tenant["id"],
+                "name": tenant["name"],
+                "structure": tenant.get("structure", "Non défini") or "Non défini",
+                "rent_amount": tenant.get("rent_amount", 0),
+                "months_late": months_late
+            })
+
+    late_tenants.sort(key=lambda x: (-x["months_late"], x["name"]))
+
+    return {
+        "history": history,
+        "structures": structures,
+        "late_tenants": late_tenants
+    }
+
+
 @router.get("/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
     settings = await db.user_settings.find_one(get_filter_for_user(current_user), {"_id": 0})
