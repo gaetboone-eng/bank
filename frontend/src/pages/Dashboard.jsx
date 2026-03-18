@@ -183,71 +183,75 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Grid - Bento Style */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Tenants */}
-        <Card className="border-slate-200" data-testid="stat-total-tenants">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-total-tenants">
+          <div className="h-1 bg-slate-400" />
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-slate-500">Locataires</p>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Locataires</p>
+                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
                   {stats?.total_tenants || 0}
                 </p>
               </div>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                <Users className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600" />
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center mt-0.5">
+                <Users className="w-4 h-4 text-slate-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Paid */}
-        <Card className="border-slate-200" data-testid="stat-paid-tenants">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-paid-tenants">
+          <div className="h-1 bg-emerald-500" />
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-slate-500">Loyers payés</p>
-                <p className="text-2xl sm:text-3xl font-bold text-emerald-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Payés</p>
+                <p className="text-3xl sm:text-4xl font-bold text-emerald-600 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
                   {stats?.paid_tenants || 0}
                 </p>
               </div>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-700" />
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mt-0.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Unpaid */}
-        <Card className="border-slate-200" data-testid="stat-unpaid-tenants">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-unpaid-tenants">
+          <div className="h-1 bg-orange-400" />
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-slate-500">Loyers impayés</p>
-                <p className="text-2xl sm:text-3xl font-bold text-orange-500 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Impayés</p>
+                <p className="text-3xl sm:text-4xl font-bold text-orange-500 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
                   {stats?.unpaid_tenants || 0}
                 </p>
               </div>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-100 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
+              <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center mt-0.5">
+                <AlertCircle className="w-4 h-4 text-orange-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Banks */}
-        <Card className="border-slate-200" data-testid="stat-banks">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-banks">
+          <div className="h-1 bg-sky-400" />
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-slate-500">Comptes bancaires</p>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Manrope" }}>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Banques</p>
+                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
                   {stats?.banks_count || 0}
                 </p>
               </div>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600" />
+              <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center mt-0.5">
+                <Building2 className="w-4 h-4 text-sky-500" />
               </div>
             </div>
           </CardContent>

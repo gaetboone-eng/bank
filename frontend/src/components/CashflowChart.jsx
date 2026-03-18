@@ -5,16 +5,22 @@ import { TrendingUp, AlertCircle, Clock } from "lucide-react";
 const formatCurrency = (value) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 
-function getBarColor(pct) {
-  if (pct >= 80) return "bg-emerald-600";
-  if (pct >= 50) return "bg-amber-500";
-  return "bg-red-500";
+function getBarGradient(pct) {
+  if (pct >= 80) return "from-emerald-400 to-emerald-600";
+  if (pct >= 50) return "from-amber-400 to-amber-600";
+  return "from-red-400 to-red-600";
 }
 
 function getTextColor(pct) {
   if (pct >= 80) return "text-emerald-700";
   if (pct >= 50) return "text-amber-600";
   return "text-red-600";
+}
+
+function getDotColor(pct) {
+  if (pct >= 80) return "bg-emerald-500";
+  if (pct >= 50) return "bg-amber-500";
+  return "bg-red-500";
 }
 
 export default function CashflowChart({ history, lateTenants }) {
@@ -29,41 +35,40 @@ export default function CashflowChart({ history, lateTenants }) {
               Évolution des paiements (6 mois)
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             {history.map((month, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-700 w-16">{month.label}</span>
-                  <span className="text-slate-500 text-xs">
-                    {month.paid} / {month.total} locataires
+              <div key={idx} className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${getDotColor(month.percentage)}`} />
+                    <span className="font-semibold text-slate-700 text-sm w-14">{month.label}</span>
+                  </div>
+                  <span className="text-slate-400 text-xs">
+                    {month.paid}/{month.total} locataires
                   </span>
-                  <span className={`font-bold w-12 text-right ${getTextColor(month.percentage)}`} style={{ fontFamily: "Manrope" }}>
+                  <span className={`font-bold text-sm w-12 text-right ${getTextColor(month.percentage)}`} style={{ fontFamily: "Manrope" }}>
                     {month.percentage}%
                   </span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-5">
+                <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
                   <div
-                    className={`h-5 rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${getBarColor(month.percentage)}`}
+                    className={`h-4 rounded-full bg-gradient-to-r ${getBarGradient(month.percentage)} transition-all duration-700 ease-out shadow-sm`}
                     style={{ width: `${Math.max(month.percentage, 2)}%` }}
-                  >
-                    {month.percentage > 15 && (
-                      <span className="text-white text-xs font-semibold">{month.percentage}%</span>
-                    )}
-                  </div>
+                  />
                 </div>
               </div>
             ))}
 
             {/* Legend */}
-            <div className="flex items-center justify-center gap-6 pt-2 text-xs text-slate-500">
+            <div className="flex items-center justify-center gap-6 pt-1 text-xs text-slate-400 border-t border-slate-100">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block" /> ≥ 80%
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> ≥ 80%
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> 50–79%
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> 50–79%
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> &lt; 50%
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> &lt; 50%
               </span>
             </div>
           </CardContent>
