@@ -313,7 +313,7 @@ agent_communication:
         4. Bank connection flow
         5. Tenant list and details
       - User credentials for testing: gaet.boone@gmail.com / TenantLedger2024!
-      - Frontend URL: https://cgr-portal.preview.emergentagent.com
+      - Frontend URL: https://tenant-finance-mgr.preview.emergentagent.com
   - agent: "testing"
     message: |
       🎉 COMPREHENSIVE BACKEND TESTING COMPLETED - ALL SYSTEMS OPERATIONAL

@@ -16,13 +16,16 @@ import {
   Loader2
 } from "lucide-react";
 import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync } from "@/lib/api";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { toast } from "sonner";
+import HistoricalProgressChart from "@/components/HistoricalProgressChart";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [banks, setBanks] = useState([]);
   const [structureStats, setStructureStats] = useState(null);
+  const [monthlyHistory, setMonthlyHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -30,16 +33,20 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, tenantsRes, banksRes, structureRes] = await Promise.all([
+      const [statsRes, tenantsRes, banksRes, structureRes, historyRes] = await Promise.all([
         getDashboardStats(),
         getTenants(),
         getBanks(),
-        getPaymentStatsByStructure()
+        getPaymentStatsByStructure(),
+        fetch(`${process.env.REACT_APP_BACKEND_URL}/api/dashboard/monthly-history`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        }).then(r => r.json())
       ]);
       setStats(statsRes.data);
       setTenants(tenantsRes.data);
       setBanks(banksRes.data);
       setStructureStats(structureRes.data);
+      setMonthlyHistory(historyRes.history || []);
     } catch (error) {
       toast.error("Erreur lors du chargement des données");
     } finally {
@@ -357,6 +364,10 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Historical Progress Chart */}
+      {monthlyHistory.length > 0 && (
+        <HistoricalProgressChart data={monthlyHistory} />
+      )}
 
       {/* Financial Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

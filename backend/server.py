@@ -1411,7 +1411,58 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         banks_count=len(banks)
     )
 
-# ==================== SETTINGS ====================
+@api_router.get("/dashboard/monthly-history")
+async def get_monthly_history(current_user: dict = Depends(get_current_user)):
+    """Returns paid/total tenants for last 6 months"""
+    from dateutil.relativedelta import relativedelta
+    
+    # Only count active tenants
+    active_tenants = await db.tenants.find(
+        {**get_filter_for_user(current_user), "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}},
+        {"_id": 0, "id": 1}
+    ).to_list(1000)
+    active_ids = {t["id"] for t in active_tenants}
+    total_active = len(active_ids)
+    
+    month_names_fr = {
+        1: "Jan", 2: "Fév", 3: "Mar", 4: "Avr",
+        5: "Mai", 6: "Jun", 7: "Jul", 8: "Aoû",
+        9: "Sep", 10: "Oct", 11: "Nov", 12: "Déc"
+    }
+    month_names_en = {
+        1: "January", 2: "February", 3: "March", 4: "April",
+        5: "May", 6: "June", 7: "July", 8: "August",
+        9: "September", 10: "October", 11: "November", 12: "December"
+    }
+    
+    history = []
+    now = datetime.now(timezone.utc)
+    
+    for i in range(5, -1, -1):
+        target = now - relativedelta(months=i)
+        m = target.month
+        y = target.year
+        month_en = month_names_en[m]
+        
+        paid_ids = await db.payments.distinct(
+            "tenant_id",
+            {"month": month_en, "year": y, "tenant_id": {"$in": list(active_ids)}}
+        )
+        paid = len(paid_ids)
+        
+        history.append({
+            "month": month_names_fr[m],
+            "year": y,
+            "label": f"{month_names_fr[m]} {str(y)[2:]}",
+            "paid": paid,
+            "total": total_active,
+            "unpaid": total_active - paid,
+            "percentage": round((paid / total_active * 100), 1) if total_active > 0 else 0
+        })
+    
+    return {"history": history}
+
+
 
 @api_router.get("/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
