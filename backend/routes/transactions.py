@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..models.schemas import TransactionCreate, TransactionResponse
-from ..services.matching import calculate_match_score, extract_name_words, normalize_text, match_using_learned_rules
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from models.schemas import TransactionCreate, TransactionResponse
+from services.matching import calculate_match_score, extract_name_words, normalize_text, match_using_learned_rules
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 import unicodedata
 import re
-from ..core.database import db
+from core.database import db
 
 
 def normalize_text(text: str) -> str:

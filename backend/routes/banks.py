@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..models.schemas import BankCreate, BankUpdate, BankResponse
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from models.schemas import BankCreate, BankUpdate, BankResponse
 
 router = APIRouter(prefix="/banks")
 

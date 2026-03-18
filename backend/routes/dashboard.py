@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..core.config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
-from ..models.schemas import DashboardStats, SettingsUpdate
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from core.config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
+from models.schemas import DashboardStats, SettingsUpdate
 
 router = APIRouter()
 

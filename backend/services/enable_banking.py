@@ -1,7 +1,7 @@
 import jwt as pyjwt
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from ..core.config import ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
+from core.config import ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
 
 
 def create_enable_banking_jwt() -> str:

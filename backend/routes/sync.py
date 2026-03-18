@@ -4,10 +4,10 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..core.config import ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
-from ..services.matching import calculate_match_score
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from core.config import ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
+from services.matching import calculate_match_score
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

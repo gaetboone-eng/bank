@@ -4,10 +4,10 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import RedirectResponse
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..core.config import ENABLE_BANKING_REDIRECT_URL
-from ..services.enable_banking import create_enable_banking_jwt
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from core.config import ENABLE_BANKING_REDIRECT_URL
+from services.enable_banking import create_enable_banking_jwt
 import logging
 
 logger = logging.getLogger(__name__)

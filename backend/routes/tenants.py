@@ -3,10 +3,10 @@ import aiohttp
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..core.config import NOTION_API_KEY, NOTION_DATABASE_ID
-from ..models.schemas import TenantCreate, TenantUpdate, TenantResponse
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from core.config import NOTION_API_KEY, NOTION_DATABASE_ID
+from models.schemas import TenantCreate, TenantUpdate, TenantResponse
 import logging
 
 logger = logging.getLogger(__name__)

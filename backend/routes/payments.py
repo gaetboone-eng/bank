@@ -3,9 +3,9 @@ from calendar import monthrange
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
-from ..core.database import db
-from ..core.auth import get_current_user, get_filter_for_user
-from ..models.schemas import PaymentCreate, PaymentResponse
+from core.database import db
+from core.auth import get_current_user, get_filter_for_user
+from models.schemas import PaymentCreate, PaymentResponse
 
 router = APIRouter(prefix="/payments")
 
