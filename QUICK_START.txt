@@ -1,0 +1,126 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║       🏦 CGR BANK - TENANT FINANCE MANAGER                          ║
+║                                                                      ║
+║       Assistant bancaire pour gestion automatisée de loyers         ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+📍 URL DE L'APPLICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+https://tenant-finance-mgr.preview.emergentagent.com
+
+
+🔑 COMPTE DE TEST PRINCIPAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Email    : gaet.boone@gmail.com
+Password : TenantLedger2024!
+
+
+📚 DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 PROJECT_SUMMARY.md   → Guide complet développeur (600+ lignes)
+📄 README.md            → Présentation projet GitHub
+📄 CLAUDE_HANDOFF.md    → Guide rapide pour Claude
+📄 GITHUB_GUIDE.md      → Instructions pour pousser sur GitHub
+📄 QUICK_START.txt      → Ce fichier (accès rapide)
+
+
+✅ FONCTIONNALITÉS ACTUELLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✔️  Dashboard interactif avec statistiques temps réel
+✔️  Graphique historique évolution paiements (6 mois)
+✔️  Authentification JWT multi-utilisateurs
+✔️  Synchronisation Notion (locataires)
+✔️  Intégration Enable Banking (Open Banking)
+✔️  Matching automatique intelligent
+✔️  Gestion locataires résiliés
+✔️  PWA (Progressive Web App)
+✔️  Synchronisation manuelle on-demand
+
+
+🎯 PROCHAINES TÂCHES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟠 P1  Notifications Telegram
+🟠 P2  Interface matching manuel (UI)
+🟡 P2  Refactorisation server.py (URGENT - 2500+ lignes)
+🟡 P3  Notifications Email
+🟡 P4  Guide de déploiement
+
+
+⚡️ COMMANDES RAPIDES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Redémarrer les services
+sudo supervisorctl restart backend
+sudo supervisorctl restart frontend
+
+# Voir les logs
+tail -f /var/log/supervisor/backend.err.log
+
+# Accéder MongoDB
+mongosh mongodb://localhost:27017/tenant_ledger
+
+# Tester l'API
+curl -X POST https://tenant-finance-mgr.preview.emergentagent.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"gaet.boone@gmail.com","password":"TenantLedger2024!"}'
+
+
+🔧 STACK TECHNIQUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Backend   : FastAPI + MongoDB (Motor) + APScheduler
+Frontend  : React 18 + Tailwind CSS + Shadcn UI + Recharts
+Auth      : JWT (PyJWT)
+APIs      : Enable Banking, Notion
+Deploy    : Kubernetes + Nginx + Supervisor
+
+
+📁 FICHIERS CRITIQUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/app/backend/server.py                      ⚠️ 2500+ lignes à refactoriser
+/app/backend/.env                           🔒 Secrets (gitignored)
+/app/frontend/src/pages/Dashboard.jsx       📊 Dashboard principal
+/app/frontend/src/components/HistoricalProgressChart.jsx  🆕 Nouveau
+/app/frontend/.env                          🔧 REACT_APP_BACKEND_URL
+
+
+🚀 POUR GITHUB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Suivre le guide : GITHUB_GUIDE.md
+
+Commandes rapides :
+  git init
+  git add .
+  git commit -m "🎉 Initial commit"
+  git remote add origin https://github.com/USERNAME/repo.git
+  git push -u origin main
+
+
+⚠️ RÈGLES CRITIQUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. NE JAMAIS hardcoder URLs/tokens → utiliser .env
+2. TOUJOURS exclure _id dans MongoDB : {"_id": 0}
+3. FILTRER locataires résiliés : {"deactivated": {"$ne": True}}
+4. PRÉFIXER routes backend par /api
+5. UTILISER datetime.now(timezone.utc) pas utcnow()
+
+
+📊 STATISTIQUES PROJET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Lignes backend    : ~2500 (à refactoriser)
+Composants React  : ~15
+Endpoints API     : ~40
+Collections DB    : 7
+Utilisateurs test : 3
+Locataires test   : 50
+
+
+📞 CONTACT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Email : gaet.boone@gmail.com
+Org   : CGR Bank
+
+
+═══════════════════════════════════════════════════════════════════════
+  Fait avec ❤️ et Emergent AI - Mars 2026
+═══════════════════════════════════════════════════════════════════════
