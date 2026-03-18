@@ -15,6 +15,7 @@ import {
   Loader2
 } from "lucide-react";
 import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync, getCashflowHistory } from "@/lib/api";
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 import { toast } from "sonner";
 import CashflowChart from "@/components/CashflowChart";
 
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [banks, setBanks] = useState([]);
   const [structureStats, setStructureStats] = useState(null);
   const [cashflow, setCashflow] = useState({ history: [], structures: [], late_tenants: [] });
+  const [monthlyHistory, setMonthlyHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -31,18 +33,22 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [statsRes, tenantsRes, banksRes, structureRes, cashflowRes] = await Promise.all([
+      const [statsRes, tenantsRes, banksRes, structureRes, cashflowRes, historyRes] = await Promise.all([
         getDashboardStats(),
         getTenants(),
         getBanks(),
         getPaymentStatsByStructure(),
-        getCashflowHistory()
+        getCashflowHistory(),
+        fetch(`${BACKEND_URL}/api/dashboard/monthly-history`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        }).then(r => r.json())
       ]);
       setStats(statsRes.data);
       setTenants(tenantsRes.data);
       setBanks(banksRes.data);
       setStructureStats(structureRes.data);
       setCashflow(cashflowRes.data);
+      setMonthlyHistory(historyRes.history || []);
     } catch (error) {
       toast.error("Erreur lors du chargement des données");
     } finally {
@@ -360,10 +366,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Cashflow Chart + Late Tenants */}
+      {/* Barres de progression mensuelles + Retards */}
       <CashflowChart
-        history={cashflow.history}
-        structures={cashflow.structures}
+        history={monthlyHistory}
         lateTenants={cashflow.late_tenants}
       />
 
