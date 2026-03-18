@@ -24,7 +24,8 @@ def create_enable_banking_jwt() -> str:
             with open(ENABLE_BANKING_PRIVATE_KEY, 'rb') as f:
                 key_data = f.read()
         else:
-            key_data = ENABLE_BANKING_PRIVATE_KEY.encode('utf-8')
+            # Convertit les \n littéraux (depuis .env) en vrais retours à la ligne
+            key_data = ENABLE_BANKING_PRIVATE_KEY.replace('\\n', '\n').encode('utf-8')
 
         private_key = serialization.load_pem_private_key(key_data, password=None, backend=default_backend())
         return pyjwt.encode(jwt_body, private_key, algorithm="RS256", headers={"kid": ENABLE_BANKING_APP_ID})
