@@ -459,8 +459,11 @@ async def create_tenant(tenant_data: TenantCreate, current_user: dict = Depends(
     return TenantResponse(**{**tenant_doc, "created_at": datetime.now(timezone.utc)})
 
 @api_router.get("/tenants", response_model=List[TenantResponse])
-async def get_tenants(current_user: dict = Depends(get_current_user)):
+async def get_tenants(current_user: dict = Depends(get_current_user), include_resilié: bool = False):
     filter_query = get_filter_for_user(current_user)
+    # By default, exclude resilié/terminated tenants
+    if not include_resilié:
+        filter_query = {**filter_query, "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}}
     tenants = await db.tenants.find(filter_query, {"_id": 0}).to_list(1000)
     
     # Check payment status for current month
@@ -600,7 +603,8 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                     elif status_raw in ["actif", "active", "en cours"]:
                         status = "actif"
                     else:
-                        status = "actif"  # Default to active
+                        # Status not set in Notion: preserve existing DB status, don't overwrite
+                        status = None
                     
                     if name:
                         notion_ids_seen.add(page["id"])
@@ -618,8 +622,11 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                             "rent_amount": rent,
                             "due_day": due_day,
                             "notion_id": page["id"],
-                            "status": status
                         }
+                        # Only set status if Notion explicitly provides one
+                        # If status is None (not set in Notion), preserve existing DB status
+                        if status is not None:
+                            tenant_data["status"] = status
                         
                         if existing:
                             await db.tenants.update_one(
@@ -1031,9 +1038,9 @@ async def get_monthly_payment_status(
     last_day = min(28, monthrange(year, month)[1])
     end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
     
-    # Get all tenants
+    # Get all ACTIVE tenants (exclude resilié/terminated)
     tenants = await db.tenants.find(
-        get_filter_for_user(current_user),
+        {**get_filter_for_user(current_user), "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}},
         {"_id": 0}
     ).to_list(1000)
     
@@ -1155,30 +1162,24 @@ async def get_payment_stats_by_structure(current_user: dict = Depends(get_curren
     last_day = min(28, monthrange(year, month)[1])
     end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
     
-    # Get all tenants
+    # Get all ACTIVE tenants (exclude resilié/terminated)
     tenants = await db.tenants.find(
-        get_filter_for_user(current_user),
+        {**get_filter_for_user(current_user), "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}},
         {"_id": 0}
     ).to_list(1000)
     
     # Get all payments in the date range
     payments = await db.payments.find({
         **get_filter_for_user(current_user),
-        "payment_date": {
-            "$gte": start_date.isoformat(),
-            "$lte": end_date.isoformat()
-        }
+        "payment_date": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}
     }, {"_id": 0}).to_list(10000)
     
-    # Also check transactions
+    # Also check transactions directly
     transactions = await db.transactions.find({
         **get_filter_for_user(current_user),
         "amount": {"$gt": 0},
         "matched_tenant_id": {"$ne": None},
-        "transaction_date": {
-            "$gte": start_date.isoformat(),
-            "$lte": end_date.isoformat()
-        }
+        "transaction_date": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}
     }, {"_id": 0}).to_list(10000)
     
     # Build set of tenants who paid
