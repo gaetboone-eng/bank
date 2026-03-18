@@ -554,6 +554,7 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                 results = data.get("results", [])
                 
                 synced_count = 0
+                notion_ids_seen = set()
                 for page in results:
                     props = page.get("properties", {})
                     
@@ -585,7 +586,24 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                     rent = props.get("Loyer Mensuel", {}).get("number", 0) or props.get("Rent", {}).get("number", 0) or props.get("Rent Amount", {}).get("number", 0) or 0
                     due_day = props.get("Due Day", {}).get("number", 1) or 1
                     
+                    # Read status from Notion (Statut/Status select field)
+                    status_raw = ""
+                    for status_field in ["Statut", "Status", "Etat"]:
+                        if status_field in props:
+                            sel = props[status_field].get("select")
+                            if sel:
+                                status_raw = sel.get("name", "").lower()
+                                break
+                    # Map Notion status to our status
+                    if status_raw in ["résilié", "resilié", "resilie", "résilié", "terminated", "inactif", "inactive"]:
+                        status = "resilié"
+                    elif status_raw in ["actif", "active", "en cours"]:
+                        status = "actif"
+                    else:
+                        status = "actif"  # Default to active
+                    
                     if name:
+                        notion_ids_seen.add(page["id"])
                         existing = await db.tenants.find_one({
                             **get_filter_for_user(current_user),
                             "notion_id": page["id"]
@@ -599,7 +617,8 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                             "structure": structure or "Non défini",
                             "rent_amount": rent,
                             "due_day": due_day,
-                            "notion_id": page["id"]
+                            "notion_id": page["id"],
+                            "status": status
                         }
                         
                         if existing:
@@ -619,7 +638,24 @@ async def sync_from_notion(current_user: dict = Depends(get_current_user)):
                             })
                         synced_count += 1
                 
-                return {"message": f"Synced {synced_count} tenants from Notion", "count": synced_count}
+                # Mark tenants NOT in Notion as resilié (deleted from Notion)
+                deactivated_count = 0
+                if notion_ids_seen:
+                    db_tenants = await db.tenants.find(
+                        {**get_filter_for_user(current_user), "notion_id": {"$exists": True, "$ne": None}},
+                        {"_id": 0, "id": 1, "notion_id": 1, "name": 1, "status": 1}
+                    ).to_list(1000)
+                    for t in db_tenants:
+                        if t.get("notion_id") and t["notion_id"] not in notion_ids_seen:
+                            if t.get("status") != "resilié":
+                                await db.tenants.update_one(
+                                    {"id": t["id"]},
+                                    {"$set": {"status": "resilié"}}
+                                )
+                                deactivated_count += 1
+                                logger.info(f"Tenant {t['name']} marked as resilié (removed from Notion)")
+                
+                return {"message": f"Synced {synced_count} tenants from Notion", "count": synced_count, "deactivated": deactivated_count}
     
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=500, detail=f"Connection error: {str(e)}")
@@ -1339,7 +1375,9 @@ async def send_whatsapp_notification(notification: NotificationRequest, current_
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
-    tenants = await db.tenants.find(get_filter_for_user(current_user), {"_id": 0}).to_list(1000)
+    # Exclude resilié/terminated tenants from all counts
+    all_tenants = await db.tenants.find(get_filter_for_user(current_user), {"_id": 0}).to_list(1000)
+    tenants = [t for t in all_tenants if t.get("status", "").lower() not in ["resilié", "resilie", "terminated", "inactive"]]
     banks = await db.banks.find(get_filter_for_user(current_user), {"_id": 0}).to_list(100)
     
     current_month = datetime.now(timezone.utc).strftime("%B")
@@ -1707,7 +1745,7 @@ async def sync_bank_transactions(account_uid: str, bank_id: str, current_user: d
                             **get_filter_for_user(current_user),
                             "bank_id": bank_id,
                             "amount": amount,
-                            "description": tx.get("remittance_information", ["Imported transaction"])[0] if tx.get("remittance_information") else "Imported transaction",
+                            "description": " | ".join(tx.get("remittance_information", ["Imported transaction"])) if tx.get("remittance_information") else "Imported transaction",
                             "transaction_date": f"{tx_date}T00:00:00Z",
                             "category": "rent" if amount > 0 else "expense",
                             "reference": tx_ref,
@@ -1861,7 +1899,7 @@ async def scheduled_sync_and_match():
                                             "user_id": user_id,
                                             "bank_id": default_bank_id,
                                             "amount": amount,
-                                            "description": tx.get("remittance_information", ["Imported"])[0] if tx.get("remittance_information") else "Imported",
+                                            "description": " | ".join(tx.get("remittance_information", ["Imported"])) if tx.get("remittance_information") else "Imported",
                                             "transaction_date": f"{tx_date}T00:00:00Z",
                                             "category": "rent" if amount > 0 else "expense",
                                             "reference": tx_ref,
