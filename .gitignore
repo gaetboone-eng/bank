@@ -99,6 +99,7 @@ frontend/node_modules/.cache/default-development/2.pack
 # Local machine-specific files
 .claude/*
 !.claude/memory/
+.claude/memory/*
 !.claude/memory/*.md
 start-frontend.sh
 backend/server_monolith_backup.py
