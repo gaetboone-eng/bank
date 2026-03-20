@@ -46,7 +46,7 @@ async def create_tenant(tenant_data: TenantCreate, current_user: dict = Depends(
 async def get_tenants(current_user: dict = Depends(get_current_user), include_resilié: bool = False):
     filter_query = get_filter_for_user(current_user)
     if not include_resilié:
-        filter_query = {**filter_query, "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}}
+        filter_query = {**filter_query, "status": {"$nin": ["resilié", "resilie", "terminated", "inactive"]}, "is_active": {"$ne": False}}
     tenants = await db.tenants.find(filter_query, {"_id": 0}).to_list(1000)
 
     current_month = datetime.now(timezone.utc).strftime("%B")

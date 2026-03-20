@@ -21,7 +21,7 @@ def _get_date_range(month: int, year: int):
     else:
         prev_month, prev_year = month - 1, year
 
-    start_date = datetime(prev_year, prev_month, 28, 0, 0, 0, tzinfo=timezone.utc)
+    start_date = datetime(prev_year, prev_month, 27, 0, 0, 0, tzinfo=timezone.utc)
     last_day = min(28, monthrange(year, month)[1])
     end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
     return start_date, end_date
@@ -208,6 +208,8 @@ async def get_payment_stats_by_structure(current_user: dict = Depends(get_curren
 
     total_tenants = len(tenants)
     total_paid = len(paid_tenant_ids)
+    total_expected_amount = sum(s["expected_amount"] for s in structures.values())
+    total_paid_amount = sum(s["paid_amount"] for s in structures.values())
 
     return {
         "overall": {
@@ -215,7 +217,10 @@ async def get_payment_stats_by_structure(current_user: dict = Depends(get_curren
             "paid": total_paid,
             "unpaid": total_tenants - total_paid,
             "percentage": round((total_paid / total_tenants * 100) if total_tenants > 0 else 0, 1),
-            "unpaid_names": unpaid_names
+            "unpaid_names": unpaid_names,
+            "expected_amount": total_expected_amount,
+            "paid_amount": total_paid_amount,
+            "unpaid_amount": total_expected_amount - total_paid_amount
         },
         "by_structure": sorted(structures.values(), key=lambda x: x["name"])
     }

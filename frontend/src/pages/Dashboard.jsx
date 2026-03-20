@@ -19,6 +19,7 @@ import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaym
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 import { toast } from "sonner";
 import CashflowChart from "@/components/CashflowChart";
+import AssociesCashflow from "@/components/AssociesCashflow";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [structureStats, setStructureStats] = useState(null);
   const [cashflow, setCashflow] = useState({ history: [], structures: [], late_tenants: [] });
   const [monthlyHistory, setMonthlyHistory] = useState([]);
+  const [structureCashflow, setStructureCashflow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -55,6 +57,17 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchStructureCashflow = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/structure-cashflow`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data && data.structures) setStructureCashflow(data);
+    } catch(e) { console.warn("structure-cashflow error", e); }
   };
 
   const handleAutoMatch = async () => {
@@ -103,6 +116,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
+    fetchStructureCashflow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -279,7 +293,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <div className="w-full bg-slate-200 rounded-full h-6">
-                <div 
+                <div
                   className="bg-emerald-600 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-3"
                   style={{ width: `${structureStats.overall.percentage}%` }}
                 >
@@ -288,6 +302,18 @@ export default function Dashboard() {
                       {structureStats.overall.percentage}%
                     </span>
                   )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm pt-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-slate-600">Collecté :</span>
+                  <span className="font-semibold text-emerald-700">{formatCurrency(structureStats.overall.paid_amount || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
+                  <span className="text-slate-600">Restant :</span>
+                  <span className="font-semibold text-orange-600">{formatCurrency(structureStats.overall.unpaid_amount || 0)}</span>
                 </div>
               </div>
               
@@ -339,10 +365,22 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="w-full bg-slate-200 rounded-full h-4">
-                      <div 
+                      <div
                         className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
                         style={{ width: `${structure.percentage}%` }}
                       />
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-0.5">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-slate-500">Collecté :</span>
+                        <span className="font-semibold text-emerald-700">{formatCurrency(structure.paid_amount || 0)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-orange-400" />
+                        <span className="text-slate-500">Restant :</span>
+                        <span className="font-semibold text-orange-600">{formatCurrency((structure.expected_amount || 0) - (structure.paid_amount || 0))}</span>
+                      </div>
                     </div>
                     
                     {/* Unpaid tenants for this structure */}
@@ -376,6 +414,9 @@ export default function Dashboard() {
         history={monthlyHistory}
         lateTenants={cashflow.late_tenants}
       />
+
+      {/* Cashflow structures + associés */}
+      <AssociesCashflow data={structureCashflow} />
 
       {/* Financial Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

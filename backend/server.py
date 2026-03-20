@@ -13,6 +13,7 @@ from routes.payments import router as payments_router
 from routes.dashboard import router as dashboard_router
 from routes.banking import router as banking_router
 from routes.sync import router as sync_router, scheduler
+from routes.quittances import router as quittances_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ api.include_router(payments_router)
 api.include_router(dashboard_router)
 api.include_router(banking_router)
 api.include_router(sync_router)
+api.include_router(quittances_router)
 
 app.include_router(api)
 

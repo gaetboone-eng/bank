@@ -182,6 +182,204 @@ async def get_cashflow_history(current_user: dict = Depends(get_current_user)):
     }
 
 
+
+# ── Constantes associés ──────────────────────────────────────────────────────
+
+ASSOCIES_PARTS = {
+    "Gaetan": {
+        "🏥 Seclin": 0.366,
+        "🏢 Armentières": 0.33,
+        "🏘️ La Madeleine": 0.33,
+        "🏭 Roncq": 0.0,
+        "Hem": 0.0,
+    },
+    "Romain": {
+        "🏥 Seclin": 0.316,
+        "🏢 Armentières": 0.33,
+        "🏘️ La Madeleine": 0.33,
+        "🏭 Roncq": 0.5,
+        "Hem": 0.5,
+    },
+    "Clément": {
+        "🏥 Seclin": 0.316,
+        "🏢 Armentières": 0.33,
+        "🏘️ La Madeleine": 0.33,
+        "🏭 Roncq": 0.5,
+        "Hem": 0.5,
+    },
+}
+
+BANK_TO_STRUCTURE = {
+    "seclin":      "🏥 Seclin",
+    "armentieres": "🏢 Armentières",
+    "armentières": "🏢 Armentières",
+    "madeleine":   "🏘️ La Madeleine",
+    "roncq":       "🏭 Roncq",
+    "hem":         "Hem",
+}
+
+def _bank_to_structure(bank_name: str) -> str:
+    name = bank_name.lower()
+    for key, struct in BANK_TO_STRUCTURE.items():
+        if key in name:
+            return struct
+    return bank_name
+
+
+@router.get("/dashboard/structure-cashflow")
+async def get_structure_cashflow(current_user: dict = Depends(get_current_user)):
+    """Cashflow par structure depuis le 1er janvier (loyers - dépenses) + répartition associés."""
+    from dateutil.relativedelta import relativedelta
+
+    now = datetime.now(timezone.utc)
+    jan_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    # Récupérer toutes les banques
+    banks = await db.banks.find(get_filter_for_user(current_user), {"_id": 0}).to_list(100)
+    bank_map = {b["id"]: b for b in banks}
+
+    # Toutes les transactions depuis jan 1 (hors dépôts de garantie)
+    EXCLUDE_KEYWORDS = [
+        "depot de garantie", "depot garantie", "caution",
+        "dg loyer", "garantie locative"
+    ]
+    all_txs = await db.transactions.find(
+        {
+            **get_filter_for_user(current_user),
+            "transaction_date": {"$gte": jan_start.isoformat()}
+        },
+        {"_id": 0}
+    ).to_list(10000)
+    transactions = [
+        tx for tx in all_txs
+        if not any(kw in (tx.get("description") or "").lower() for kw in EXCLUDE_KEYWORDS)
+    ]
+
+    # Grouper par structure
+    structure_data = {}
+    for tx in transactions:
+        bank = bank_map.get(tx.get("bank_id", ""), {})
+        struct = _bank_to_structure(bank.get("name", ""))
+        amount = tx.get("amount", 0)
+
+        if struct not in structure_data:
+            structure_data[struct] = {"loyers": 0.0, "depenses": 0.0, "transactions": 0}
+
+        if amount > 0:
+            structure_data[struct]["loyers"] += amount
+        else:
+            structure_data[struct]["depenses"] += abs(amount)
+        structure_data[struct]["transactions"] += 1
+
+    # Construire résultat par structure
+    structures_result = []
+    for struct, data in structure_data.items():
+        cashflow = data["loyers"] - data["depenses"]
+        structures_result.append({
+            "structure": struct,
+            "loyers": round(data["loyers"], 2),
+            "depenses": round(data["depenses"], 2),
+            "cashflow": round(cashflow, 2),
+            "transactions": data["transactions"],
+        })
+    structures_result.sort(key=lambda x: x["structure"])
+
+    # Total global
+    total_loyers   = sum(s["loyers"]   for s in structures_result)
+    total_depenses = sum(s["depenses"] for s in structures_result)
+    total_cashflow = total_loyers - total_depenses
+
+    # Répartition par associé
+    associes_result = []
+    for associe, parts in ASSOCIES_PARTS.items():
+        total_associe = 0.0
+        detail = []
+        for struct_data in structures_result:
+            struct = struct_data["structure"]
+            part = parts.get(struct, 0.0)
+            montant = round(struct_data["cashflow"] * part, 2)
+            total_associe += montant
+            detail.append({
+                "structure": struct,
+                "part_pct": round(part * 100, 1),
+                "cashflow_structure": struct_data["cashflow"],
+                "montant": montant,
+            })
+        associes_result.append({
+            "nom": associe,
+            "total": round(total_associe, 2),
+            "detail": detail,
+            "parts": {k: round(v * 100, 1) for k, v in parts.items()},
+        })
+
+    # Historique mensuel depuis jan (global + par structure pour calcul associés)
+    monthly = []
+    monthly_structure = {}  # label -> struct -> {loyers, depenses}
+    m = jan_start
+    while m <= now:
+        m_end = (m + relativedelta(months=1))
+        label = m.strftime("%b %y")
+        month_txs = [
+            tx for tx in transactions
+            if m.isoformat() <= tx.get("transaction_date", "") < m_end.isoformat()
+        ]
+        m_loyers   = sum(tx["amount"] for tx in month_txs if tx["amount"] > 0)
+        m_depenses = sum(abs(tx["amount"]) for tx in month_txs if tx["amount"] < 0)
+        monthly.append({
+            "label": label,
+            "loyers": round(m_loyers, 2),
+            "depenses": round(m_depenses, 2),
+            "cashflow": round(m_loyers - m_depenses, 2),
+        })
+        # Décomposer par structure pour ce mois
+        m_struct = {}
+        for tx in month_txs:
+            bank = bank_map.get(tx.get("bank_id", ""), {})
+            struct = _bank_to_structure(bank.get("name", ""))
+            amount = tx.get("amount", 0)
+            if struct not in m_struct:
+                m_struct[struct] = {"loyers": 0.0, "depenses": 0.0}
+            if amount > 0:
+                m_struct[struct]["loyers"] += amount
+            else:
+                m_struct[struct]["depenses"] += abs(amount)
+        monthly_structure[label] = m_struct
+        m = m_end
+
+    # Cashflow annuel par associé + breakdown mensuel
+    for assoc in associes_result:
+        annual = 0.0
+        for struct_data in structures_result:
+            struct = struct_data["structure"]
+            part = ASSOCIES_PARTS[assoc["nom"]].get(struct, 0.0)
+            annual += struct_data["cashflow"] * part
+        assoc["annuel"] = round(annual, 2)
+
+        # Mensuel par associé
+        assoc_monthly = []
+        for m_data in monthly:
+            lbl = m_data["label"]
+            m_struct = monthly_structure.get(lbl, {})
+            m_total = 0.0
+            for struct, cf_data in m_struct.items():
+                struct_cf = cf_data["loyers"] - cf_data["depenses"]
+                part = ASSOCIES_PARTS[assoc["nom"]].get(struct, 0.0)
+                m_total += struct_cf * part
+            assoc_monthly.append({"label": lbl, "cashflow": round(m_total, 2)})
+        assoc["monthly"] = assoc_monthly
+
+    return {
+        "period": f"Depuis le 01/01/{now.year}",
+        "oldest_transaction": "16/02/2026",
+        "structures": structures_result,
+        "total": {
+            "loyers": round(total_loyers, 2),
+            "depenses": round(total_depenses, 2),
+            "cashflow": round(total_cashflow, 2),
+        },
+        "associes": associes_result,
+        "monthly": monthly,
+    }
 @router.get("/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
     settings = await db.user_settings.find_one(get_filter_for_user(current_user), {"_id": 0})
