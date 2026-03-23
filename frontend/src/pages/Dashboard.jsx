@@ -13,7 +13,8 @@ import {
   ArrowRight,
   RefreshCw,
   Sparkles,
-  Loader2
+  Loader2,
+  Euro
 } from "lucide-react";
 import { getDashboardStats, getTenants, getBanks, autoMatchTransactions, getPaymentStatsByStructure, manualSync, getCashflowHistory } from "@/lib/api";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -93,18 +94,10 @@ export default function Dashboard() {
     try {
       const response = await manualSync();
       const results = response.data.results;
-      
       let message = "Synchronisation terminée : ";
-      if (results.notion_sync.success) {
-        message += `${results.notion_sync.count} locataires`;
-      }
-      if (results.bank_sync.success) {
-        message += `, ${results.bank_sync.count} transactions`;
-      }
-      if (results.matching.success) {
-        message += `, ${results.matching.count} matchés`;
-      }
-      
+      if (results.notion_sync.success) message += `${results.notion_sync.count} locataires`;
+      if (results.bank_sync.success) message += `, ${results.bank_sync.count} transactions`;
+      if (results.matching.success) message += `, ${results.matching.count} matchés`;
       toast.success(message);
       fetchData();
     } catch (error) {
@@ -120,15 +113,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR"
-    }).format(amount);
-  };
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(amount);
 
   const unpaidTenants = tenants.filter(t => t.payment_status !== "paid");
-  const paidTenants = tenants.filter(t => t.payment_status === "paid");
 
   if (loading) {
     return (
@@ -140,75 +128,34 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-fade-in" data-testid="dashboard-page">
-      {/* Header */}
+
+      {/* ── HEADER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight" style={{ fontFamily: "Manrope" }}>
             Tableau de bord
           </h1>
-          <p className="text-sm sm:text-base text-slate-500 mt-1">
-            Vue d'ensemble de vos locations
-          </p>
+          <p className="text-sm sm:text-base text-slate-500 mt-1">Vue d'ensemble de vos locations</p>
         </div>
         <div className="flex gap-2 sm:gap-3">
-          <Button 
-            onClick={handleManualSync}
-            disabled={syncing}
-            variant="outline"
-            className="gap-2 flex-1 sm:flex-none text-sm"
-            data-testid="sync-btn"
-            size="sm"
-          >
-            {syncing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="hidden sm:inline">Synchronisation...</span>
-                <span className="sm:hidden">Sync...</span>
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                <span className="hidden sm:inline">Synchroniser</span>
-                <span className="sm:hidden">Sync</span>
-              </>
-            )}
+          <Button onClick={handleManualSync} disabled={syncing} variant="outline" className="gap-2 flex-1 sm:flex-none text-sm" size="sm">
+            {syncing ? <><Loader2 className="w-4 h-4 animate-spin" /><span className="hidden sm:inline">Synchronisation...</span><span className="sm:hidden">Sync...</span></> : <><RefreshCw className="w-4 h-4" /><span className="hidden sm:inline">Synchroniser</span><span className="sm:hidden">Sync</span></>}
           </Button>
-          <Button 
-            onClick={handleAutoMatch}
-            disabled={matching}
-            className="bg-emerald-900 hover:bg-emerald-800 gap-2 flex-1 sm:flex-none text-sm"
-            data-testid="match-btn"
-            size="sm"
-          >
-            {matching ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="hidden sm:inline">Matching...</span>
-                <span className="sm:hidden">Match...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline">Associer paiements</span>
-                <span className="sm:hidden">Associer</span>
-              </>
-            )}
+          <Button onClick={handleAutoMatch} disabled={matching} className="bg-emerald-900 hover:bg-emerald-800 gap-2 flex-1 sm:flex-none text-sm" size="sm">
+            {matching ? <><Loader2 className="w-4 h-4 animate-spin" /><span className="hidden sm:inline">Matching...</span><span className="sm:hidden">Match...</span></> : <><Sparkles className="w-4 h-4" /><span className="hidden sm:inline">Associer paiements</span><span className="sm:hidden">Associer</span></>}
           </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* ── 1. TOTAL LOCATAIRES ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Tenants */}
-        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-total-tenants">
+        <Card className="border-0 shadow-sm overflow-hidden">
           <div className="h-1 bg-slate-400" />
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Locataires</p>
-                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
-                  {stats?.total_tenants || 0}
-                </p>
+                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>{stats?.total_tenants || 0}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center mt-0.5">
                 <Users className="w-4 h-4 text-slate-500" />
@@ -217,16 +164,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Paid */}
-        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-paid-tenants">
+        <Card className="border-0 shadow-sm overflow-hidden">
           <div className="h-1 bg-emerald-500" />
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Payés</p>
-                <p className="text-3xl sm:text-4xl font-bold text-emerald-600 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
-                  {stats?.paid_tenants || 0}
-                </p>
+                <p className="text-3xl sm:text-4xl font-bold text-emerald-600 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>{stats?.paid_tenants || 0}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mt-0.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -235,16 +179,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Unpaid */}
-        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-unpaid-tenants">
+        <Card className="border-0 shadow-sm overflow-hidden">
           <div className="h-1 bg-orange-400" />
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Impayés</p>
-                <p className="text-3xl sm:text-4xl font-bold text-orange-500 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
-                  {stats?.unpaid_tenants || 0}
-                </p>
+                <p className="text-3xl sm:text-4xl font-bold text-orange-500 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>{stats?.unpaid_tenants || 0}</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center mt-0.5">
                 <AlertCircle className="w-4 h-4 text-orange-500" />
@@ -253,322 +194,115 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Banks */}
-        <Card className="border-0 shadow-sm overflow-hidden" data-testid="stat-banks">
-          <div className="h-1 bg-sky-400" />
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <div className="h-1 bg-emerald-600" />
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Banques</p>
-                <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>
-                  {stats?.banks_count || 0}
-                </p>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Collecté</p>
+                <p className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1.5 leading-none" style={{ fontFamily: "Manrope" }}>{formatCurrency(stats?.total_rent_collected || 0)}</p>
+                <p className="text-xs text-slate-400 mt-1">/ {formatCurrency(stats?.total_rent_expected || 0)}</p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center mt-0.5">
-                <Building2 className="w-4 h-4 text-sky-500" />
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mt-0.5">
+                <Euro className="w-4 h-4 text-emerald-600" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Progress Bars Section */}
-      {structureStats && (
-        <div className="space-y-6">
-          {/* Overall Progress */}
-          <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2" style={{ fontFamily: "Manrope" }}>
-                <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                Progression globale des paiements
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-slate-700">
-                  {structureStats.overall.paid} / {structureStats.overall.total} locataires ont payé
-                </span>
-                <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>
-                  {structureStats.overall.percentage}%
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-6">
-                <div
-                  className="bg-emerald-600 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-3"
-                  style={{ width: `${structureStats.overall.percentage}%` }}
-                >
-                  {structureStats.overall.percentage > 10 && (
-                    <span className="text-white text-xs font-semibold">
-                      {structureStats.overall.percentage}%
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm pt-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span className="text-slate-600">Collecté :</span>
-                  <span className="font-semibold text-emerald-700">{formatCurrency(structureStats.overall.paid_amount || 0)}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
-                  <span className="text-slate-600">Restant :</span>
-                  <span className="font-semibold text-orange-600">{formatCurrency(structureStats.overall.unpaid_amount || 0)}</span>
-                </div>
-              </div>
-              
-              {/* Unpaid Tenants List */}
-              {structureStats.overall.unpaid > 0 && (
-                <div className="mt-4 p-3 sm:p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                    <AlertCircle className="w-4 h-4 text-orange-600" />
-                    <h4 className="text-sm sm:text-base font-semibold text-orange-900">
-                      Locataires en attente ({structureStats.overall.unpaid})
-                    </h4>
+      {/* ── 2. INFOS PAR STRUCTURE ── */}
+      {structureStats && structureStats.by_structure.length > 0 && (
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2" style={{ fontFamily: "Manrope" }}>
+              <Building2 className="w-5 h-5 text-slate-700" />
+              Paiements par structure
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {structureStats.by_structure.map((structure, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-slate-900">{structure.name}</h4>
+                    <p className="text-sm text-slate-500">{structure.paid} / {structure.total} locataires</p>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                    {structureStats.overall.unpaid_names.map((name, idx) => (
-                      <span 
-                        key={idx}
-                        className="px-2 sm:px-3 py-0.5 sm:py-1 bg-white text-orange-700 rounded-full text-xs sm:text-sm border border-orange-200"
-                      >
-                        {name}
-                      </span>
-                    ))}
+                  <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>{structure.percentage}%</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-4">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
+                    style={{ width: `${structure.percentage}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-slate-500">Collecté :</span>
+                    <span className="font-semibold text-emerald-700">{formatCurrency(structure.paid_amount || 0)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                    <span className="text-slate-500">Restant :</span>
+                    <span className="font-semibold text-orange-600">{formatCurrency((structure.expected_amount || 0) - (structure.paid_amount || 0))}</span>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            ))}
 
-          {/* Progress by Structure */}
-          {structureStats.by_structure.length > 1 && (
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2" style={{ fontFamily: "Manrope" }}>
-                  <Building2 className="w-5 h-5 text-slate-700" />
-                  Progression par structure
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {structureStats.by_structure.map((structure, idx) => (
-                  <div key={idx} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold text-slate-900">{structure.name}</h4>
-                        <p className="text-sm text-slate-500">
-                          {structure.paid} / {structure.total} locataires
-                        </p>
-                      </div>
-                      <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>
-                        {structure.percentage}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-4">
-                      <div
-                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
-                        style={{ width: `${structure.percentage}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs pt-0.5">
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span className="text-slate-500">Collecté :</span>
-                        <span className="font-semibold text-emerald-700">{formatCurrency(structure.paid_amount || 0)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full bg-orange-400" />
-                        <span className="text-slate-500">Restant :</span>
-                        <span className="font-semibold text-orange-600">{formatCurrency((structure.expected_amount || 0) - (structure.paid_amount || 0))}</span>
-                      </div>
-                    </div>
-                    
-                    {/* Unpaid tenants for this structure */}
-                    {structure.unpaid > 0 && (
-                      <div className="ml-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        <p className="text-xs text-slate-600 font-medium mb-2">
-                          En attente ({structure.unpaid}) :
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {structure.unpaid_tenants.map((tenant, tidx) => (
-                            <span 
-                              key={tidx}
-                              className="px-2 py-1 bg-white text-slate-700 rounded text-xs border border-slate-300"
-                            >
-                              {tenant.name} ({formatCurrency(tenant.rent_amount)})
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+            {/* Global bar */}
+            {structureStats.overall && (
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">Total global</span>
+                  <span className="text-lg font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>{structureStats.overall.percentage}%</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-6">
+                  <div
+                    className="bg-emerald-600 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-3"
+                    style={{ width: `${structureStats.overall.percentage}%` }}
+                  >
+                    {structureStats.overall.percentage > 10 && (
+                      <span className="text-white text-xs font-semibold">{structureStats.overall.percentage}%</span>
                     )}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Barres de progression mensuelles + Retards */}
-      <CashflowChart
-        history={monthlyHistory}
-        lateTenants={cashflow.late_tenants}
-      />
-
-      {/* Cashflow structures + associés */}
-      <AssociesCashflow data={structureCashflow} />
-
-      {/* Financial Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Expected vs Collected */}
-        <Card className="border-slate-200" data-testid="financial-overview-card">
-          <CardHeader>
-            <CardTitle style={{ fontFamily: "Manrope" }}>Aperçu financier du mois</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-slate-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500">Loyers attendus</p>
-                  <p className="text-xl font-bold text-slate-900" style={{ fontFamily: "Manrope" }}>
-                    {formatCurrency(stats?.total_rent_expected || 0)}
-                  </p>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-200 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                </div>
-                <div>
-                  <p className="text-sm text-emerald-700">Loyers collectés</p>
-                  <p className="text-xl font-bold text-emerald-900" style={{ fontFamily: "Manrope" }}>
-                    {formatCurrency(stats?.total_rent_collected || 0)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center">
-                  <TrendingDown className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-orange-700">Reste à percevoir</p>
-                  <p className="text-xl font-bold text-orange-600" style={{ fontFamily: "Manrope" }}>
-                    {formatCurrency((stats?.total_rent_expected || 0) - (stats?.total_rent_collected || 0))}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Banks Overview */}
-        <Card className="border-slate-200" data-testid="banks-overview-card">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle style={{ fontFamily: "Manrope" }}>Vos banques</CardTitle>
-            <Link to="/banks">
-              <Button variant="ghost" size="sm" data-testid="view-all-banks-btn">
-                Voir tout <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {banks.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <Building2 className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p>Aucune banque configurée</p>
-                <Link to="/banks">
-                  <Button variant="outline" size="sm" className="mt-3" data-testid="add-first-bank-btn">
-                    Ajouter une banque
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <>
-                {banks.slice(0, 3).map((bank) => (
-                  <div 
-                    key={bank.id} 
-                    className="flex items-center justify-between p-4 rounded-lg"
-                    style={{ backgroundColor: `${bank.color}10` }}
-                    data-testid={`bank-card-${bank.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: bank.color }}
-                      >
-                        <Building2 className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{bank.name}</p>
-                        {bank.iban && (
-                          <p className="text-xs text-slate-500 font-mono">
-                            {bank.iban.slice(-8)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <p className={`font-bold ${bank.balance >= 0 ? 'text-emerald-700' : 'text-red-600'}`} style={{ fontFamily: "Manrope" }}>
-                      {formatCurrency(bank.balance)}
-                    </p>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-500">Solde total</p>
-                    <p className="text-xl font-bold text-slate-900" style={{ fontFamily: "Manrope" }}>
-                      {formatCurrency(stats?.total_balance || 0)}
-                    </p>
-                  </div>
-                </div>
-              </>
             )}
           </CardContent>
         </Card>
-      </div>
+      )}
 
+      {/* ── 3. RENTABILITÉ ── */}
+      <CashflowChart history={monthlyHistory} lateTenants={[]} />
+      <AssociesCashflow data={structureCashflow} />
 
-      {/* Recent Paid */}
-      {paidTenants.length > 0 && (
-        <Card className="border-slate-200" data-testid="paid-tenants-section">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle style={{ fontFamily: "Manrope" }}>
-              Paiements reçus ce mois
+      {/* ── 4. LOCATAIRES IMPAYÉS ── */}
+      {unpaidTenants.length > 0 && (
+        <Card className="border-orange-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800" style={{ fontFamily: "Manrope" }}>
+              <AlertCircle className="w-5 h-5 text-orange-500" />
+              Locataires n'ayant pas encore payé ({unpaidTenants.length})
             </CardTitle>
-            <Link to="/tenants">
-              <Button variant="ghost" size="sm" data-testid="view-all-tenants-btn">
-                Voir tout <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {paidTenants.slice(0, 5).map((tenant) => (
-                <div 
-                  key={tenant.id} 
-                  className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg"
-                  data-testid={`paid-tenant-${tenant.id}`}
-                >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {unpaidTenants.map((tenant) => (
+                <div key={tenant.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-100">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-200 flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+                    <div className="w-9 h-9 rounded-full bg-orange-200 flex items-center justify-center shrink-0">
+                      <Users className="w-4 h-4 text-orange-700" />
                     </div>
                     <div>
-                      <p className="font-medium text-slate-900">{tenant.name}</p>
-                      <p className="text-sm text-slate-500">{tenant.property_address}</p>
+                      <p className="font-medium text-slate-900 text-sm">{tenant.name}</p>
+                      <p className="text-xs text-slate-500">{tenant.property_address || tenant.structure}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-emerald-700" style={{ fontFamily: "Manrope" }}>
-                      {formatCurrency(tenant.rent_amount)}
-                    </p>
-                    <span className="status-paid">Payé</span>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="font-bold text-orange-600 text-sm" style={{ fontFamily: "Manrope" }}>{formatCurrency(tenant.rent_amount)}</p>
+                    <span className="text-xs text-orange-500">En attente</span>
                   </div>
                 </div>
               ))}
@@ -576,6 +310,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 }
