@@ -4,10 +4,14 @@ from core.database import db
 from core.auth import get_current_user, get_filter_for_user
 from core.config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
 from models.schemas import DashboardStats, SettingsUpdate
+from services.categorization import CATEGORIES, CATEGORIES_LIST, normalize_category
 
 router = APIRouter()
 
 ACTIVE_STATUS_FILTER = {"$nin": ["resilié", "resilie", "terminated", "inactive"]}
+
+INCOME_CATEGORIES = {"loyer_encaisse", "autre_recette", "rent", "deposit"}
+NEUTRAL_CATEGORIES = {"virement_interne"}
 
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
@@ -380,6 +384,132 @@ async def get_structure_cashflow(current_user: dict = Depends(get_current_user))
         "associes": associes_result,
         "monthly": monthly,
     }
+
+
+@router.get("/dashboard/financial-summary")
+async def get_financial_summary(current_user: dict = Depends(get_current_user)):
+    """
+    Résumé financier style Indy:
+    - KPIs YTD: CA, Charges, Résultat, Trésorerie
+    - Tableau mensuel (12 derniers mois): CA / Charges / Résultat
+    - Répartition des charges par catégorie
+    - Dernières transactions
+    """
+    from dateutil.relativedelta import relativedelta
+
+    now = datetime.now(timezone.utc)
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    month_names_fr = {1: "Jan", 2: "Fév", 3: "Mar", 4: "Avr", 5: "Mai", 6: "Jun",
+                      7: "Jul", 8: "Aoû", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Déc"}
+
+    # Fetch all transactions for the current year
+    all_tx = await db.transactions.find(
+        {**get_filter_for_user(current_user),
+         "transaction_date": {"$gte": year_start.isoformat()}},
+        {"_id": 0}
+    ).sort("transaction_date", -1).to_list(5000)
+
+    # Normalize categories
+    for tx in all_tx:
+        raw_cat = tx.get("category", "")
+        tx["_norm_cat"] = normalize_category(raw_cat) if raw_cat else ("loyer_encaisse" if tx.get("amount", 0) > 0 else "frais_divers")
+
+    # YTD KPIs
+    ytd_ca = sum(tx["amount"] for tx in all_tx if tx["_norm_cat"] in INCOME_CATEGORIES and tx["_norm_cat"] not in NEUTRAL_CATEGORIES)
+    ytd_charges = abs(sum(tx["amount"] for tx in all_tx if tx.get("amount", 0) < 0 and tx["_norm_cat"] not in NEUTRAL_CATEGORIES))
+    ytd_resultat = ytd_ca - ytd_charges
+
+    # Bank balances (trésorerie)
+    banks = await db.banks.find(get_filter_for_user(current_user), {"_id": 0}).to_list(100)
+    tresorerie = sum(b.get("balance", 0) for b in banks)
+
+    # Monthly table (current year months up to now)
+    monthly = []
+    for month_num in range(1, now.month + 1):
+        month_start = datetime(now.year, month_num, 1, tzinfo=timezone.utc)
+        if month_num < 12:
+            month_end = datetime(now.year, month_num + 1, 1, tzinfo=timezone.utc)
+        else:
+            month_end = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+
+        month_tx = [
+            tx for tx in all_tx
+            if month_start.isoformat() <= tx.get("transaction_date", "") < month_end.isoformat()
+        ]
+
+        m_ca = sum(tx["amount"] for tx in month_tx if tx["_norm_cat"] in INCOME_CATEGORIES and tx["_norm_cat"] not in NEUTRAL_CATEGORIES)
+        m_charges = abs(sum(tx["amount"] for tx in month_tx if tx.get("amount", 0) < 0 and tx["_norm_cat"] not in NEUTRAL_CATEGORIES))
+        m_resultat = m_ca - m_charges
+
+        monthly.append({
+            "month": month_num,
+            "label": month_names_fr[month_num],
+            "ca": round(m_ca, 2),
+            "charges": round(m_charges, 2),
+            "resultat": round(m_resultat, 2),
+            "is_current": month_num == now.month
+        })
+
+    # Expense breakdown by category (YTD)
+    expense_tx = [tx for tx in all_tx if tx.get("amount", 0) < 0 and tx["_norm_cat"] not in NEUTRAL_CATEGORIES]
+    category_totals = {}
+    for tx in expense_tx:
+        cat = tx["_norm_cat"]
+        category_totals[cat] = category_totals.get(cat, 0) + abs(tx["amount"])
+
+    expense_breakdown = []
+    for cat_key, total in sorted(category_totals.items(), key=lambda x: -x[1]):
+        cat_info = CATEGORIES.get(cat_key, CATEGORIES.get("frais_divers"))
+        expense_breakdown.append({
+            "category": cat_key,
+            "label": cat_info["label"],
+            "color": cat_info["color"],
+            "total": round(total, 2),
+            "percentage": round(total / ytd_charges * 100, 1) if ytd_charges > 0 else 0
+        })
+
+    # Recent transactions (last 10)
+    recent_tx = []
+    for tx in all_tx[:15]:
+        cat_info = CATEGORIES.get(tx["_norm_cat"], CATEGORIES.get("frais_divers"))
+        # Get bank name
+        bank = next((b for b in banks if b.get("id") == tx.get("bank_id")), None)
+        recent_tx.append({
+            "id": tx.get("id"),
+            "description": tx.get("description", ""),
+            "amount": tx.get("amount", 0),
+            "transaction_date": tx.get("transaction_date", ""),
+            "category": tx["_norm_cat"],
+            "category_label": cat_info["label"],
+            "category_color": cat_info["color"],
+            "bank_name": bank.get("name", "") if bank else "",
+            "bank_color": bank.get("color", "#64748b") if bank else "#64748b",
+            "matched_tenant_id": tx.get("matched_tenant_id")
+        })
+
+    # Categories list for frontend
+    return {
+        "kpis": {
+            "ca": round(ytd_ca, 2),
+            "charges": round(ytd_charges, 2),
+            "resultat": round(ytd_resultat, 2),
+            "tresorerie": round(tresorerie, 2)
+        },
+        "monthly": monthly,
+        "expense_breakdown": expense_breakdown,
+        "recent_transactions": recent_tx,
+        "categories": CATEGORIES_LIST
+    }
+
+
+@router.get("/dashboard/expense-breakdown")
+async def get_expense_breakdown(current_user: dict = Depends(get_current_user)):
+    """Répartition des dépenses par catégorie (compatibilité legacy)."""
+    summary = await get_financial_summary(current_user)
+    return {"breakdown": summary["expense_breakdown"]}
+
+
 @router.get("/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
     settings = await db.user_settings.find_one(get_filter_for_user(current_user), {"_id": 0})

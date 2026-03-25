@@ -39,12 +39,29 @@ import { getTransactions, createTransaction, getBanks, getTenants, matchTransact
 import { toast } from "sonner";
 
 const CATEGORIES = [
-  { value: "rent", label: "Loyer" },
-  { value: "deposit", label: "Dépôt" },
-  { value: "expense", label: "Dépense" },
-  { value: "maintenance", label: "Maintenance" },
-  { value: "tax", label: "Impôts" },
-  { value: "other", label: "Autre" },
+  // Recettes
+  { value: "loyer_encaisse", label: "Loyer encaissé", color: "#10b981", type: "income" },
+  { value: "autre_recette", label: "Autre recette", color: "#34d399", type: "income" },
+  // Charges
+  { value: "eau_gaz_electricite", label: "Eau, gaz, électricité", color: "#3b82f6", type: "expense" },
+  { value: "entretien_reparation", label: "Entretien et réparation", color: "#f59e0b", type: "expense" },
+  { value: "travaux_amelioration", label: "Travaux d'amélioration", color: "#8b5cf6", type: "expense" },
+  { value: "assurance", label: "Assurance", color: "#06b6d4", type: "expense" },
+  { value: "internet_telephone", label: "Internet, téléphone", color: "#64748b", type: "expense" },
+  { value: "abonnement_logiciel", label: "Abonnement logiciel", color: "#6366f1", type: "expense" },
+  { value: "emprunt", label: "Emprunt", color: "#ef4444", type: "expense" },
+  { value: "charges_copropriete", label: "Charges de copropriété", color: "#f97316", type: "expense" },
+  { value: "autres_impots_taxes", label: "Autres impôts et taxes", color: "#dc2626", type: "expense" },
+  { value: "frais_bancaires", label: "Frais bancaires", color: "#94a3b8", type: "expense" },
+  { value: "virement_interne", label: "Virement interne", color: "#a8a29e", type: "neutral" },
+  { value: "frais_divers", label: "Frais divers", color: "#78716c", type: "expense" },
+  // Legacy
+  { value: "rent", label: "Loyer encaissé", color: "#10b981", type: "income" },
+  { value: "expense", label: "Dépense", color: "#78716c", type: "expense" },
+  { value: "maintenance", label: "Entretien", color: "#f59e0b", type: "expense" },
+  { value: "tax", label: "Impôts", color: "#dc2626", type: "expense" },
+  { value: "deposit", label: "Dépôt", color: "#34d399", type: "income" },
+  { value: "other", label: "Autre", color: "#78716c", type: "expense" },
 ];
 
 export default function Transactions() {
